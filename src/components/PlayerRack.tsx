@@ -5,11 +5,16 @@ import { cn } from "@/lib/utils";
 interface PlayerRackProps {
   tiles: Tile[];
   onTileSelect: (tile: Tile) => void;
+  onTileDrag?: (tile: Tile) => void;
 }
 
-const PlayerRack = ({ tiles, onTileSelect }: PlayerRackProps) => {
+const PlayerRack = ({ tiles, onTileSelect, onTileDrag }: PlayerRackProps) => {
   const handleDragStart = (e: React.DragEvent, tile: Tile) => {
     e.dataTransfer.setData('tile', JSON.stringify(tile));
+    e.dataTransfer.effectAllowed = 'move';
+    if (onTileDrag) {
+      onTileDrag(tile);
+    }
   };
 
   return (

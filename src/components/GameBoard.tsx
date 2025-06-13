@@ -95,17 +95,40 @@ const getSquareLabel = (square: BoardSquare) => {
 };
 
 const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
-  const [draggedTile, setDraggedTile] = useState<Tile | null>(null);
+  const [dragOverSquare, setDragOverSquare] = useState<{row: number, col: number} | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnter = (e: React.DragEvent, row: number, col: number) => {
+    e.preventDefault();
+    if (board[row][col] === null) {
+      setDragOverSquare({ row, col });
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    // Only clear if we're leaving the board area
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverSquare(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault();
-    if (draggedTile && board[row][col] === null) {
-      onTilePlacement(row, col, draggedTile);
-      setDraggedTile(null);
+    setDragOverSquare(null);
+    
+    try {
+      const tileData = e.dataTransfer.getData('tile');
+      if (tileData && board[row][col] === null) {
+        const tile: Tile = JSON.parse(tileData);
+        onTilePlacement(row, col, tile);
+      }
+    } catch (error) {
+      console.error('Error handling tile drop:', error);
     }
   };
 
@@ -115,6 +138,7 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
         {board.map((row, rowIndex) =>
           row.map((tile, colIndex) => {
             const square = getBoardSquare(rowIndex, colIndex);
+            const isDragOver = dragOverSquare?.row === rowIndex && dragOverSquare?.col === colIndex;
             
             return (
               <div
@@ -122,9 +146,12 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
                 className={cn(
                   "w-8 h-8 sm:w-10 sm:h-10 border-2 flex items-center justify-center text-xs sm:text-sm relative transition-all duration-200 hover:scale-105",
                   getSquareClasses(square),
-                  tile ? 'bg-gradient-to-br from-yellow-200 to-yellow-300 border-yellow-400' : ''
+                  tile ? 'bg-gradient-to-br from-yellow-200 to-yellow-300 border-yellow-400' : '',
+                  isDragOver && !tile ? 'bg-green-200 border-green-400 scale-110' : ''
                 )}
                 onDragOver={handleDragOver}
+                onDragEnter={(e) => handleDragEnter(e, rowIndex, colIndex)}
+                onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, rowIndex, colIndex)}
               >
                 {tile ? (

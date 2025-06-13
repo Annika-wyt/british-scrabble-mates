@@ -74,6 +74,12 @@ const Game = () => {
     }));
 
     setPlacedTiles(prev => [...prev, { row, col, tile }]);
+
+    // Remove tile from player's rack
+    if (currentPlayer) {
+      const updatedTiles = currentPlayer.tiles.filter(t => t.id !== tile.id);
+      setCurrentPlayer(prev => prev ? { ...prev, tiles: updatedTiles } : null);
+    }
   };
 
   const handleTileReturn = (tile: Tile) => {
@@ -100,13 +106,21 @@ const Game = () => {
       const score = calculateScore(placedTiles, gameState.board);
       
       if (currentPlayer) {
+        // Draw new tiles to replace the ones used
+        const newTiles = drawTiles([...gameState.tileBag], placedTiles.length);
+        const remainingTileBag = gameState.tileBag.slice(placedTiles.length);
+        
         const updatedPlayer = {
           ...currentPlayer,
           score: currentPlayer.score + score,
-          tiles: drawTiles(gameState.tileBag, placedTiles.length)
+          tiles: [...currentPlayer.tiles, ...newTiles]
         };
         
         setCurrentPlayer(updatedPlayer);
+        setGameState(prev => ({
+          ...prev,
+          tileBag: remainingTileBag
+        }));
         setPlacedTiles([]);
         
         toast({
@@ -116,7 +130,15 @@ const Game = () => {
       }
     } else {
       // Return tiles to rack
-      placedTiles.forEach(({ tile }) => {
+      placedTiles.forEach(({ row, col, tile }) => {
+        const newBoard = gameState.board.map(boardRow => [...boardRow]);
+        newBoard[row][col] = null;
+        
+        setGameState(prev => ({
+          ...prev,
+          board: newBoard
+        }));
+        
         handleTileReturn(tile);
       });
       
@@ -144,6 +166,11 @@ const Game = () => {
     });
     
     setPlacedTiles([]);
+    
+    toast({
+      title: "Tiles recalled",
+      description: "All placed tiles have been returned to your rack."
+    });
   };
 
   if (!currentPlayer) {
@@ -169,19 +196,19 @@ const Game = () => {
               />
             </div>
             
-            <div className="flex gap-4 mt-6">
+            <div className="flex gap-4 mt-6 justify-center">
               <button
                 onClick={submitWord}
                 disabled={placedTiles.length === 0}
-                className="px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-lg font-semibold transition-colors"
+                className="px-8 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors shadow-lg"
               >
-                Submit Word
+                Submit Word ({placedTiles.length} tiles)
               </button>
               
               <button
                 onClick={recallTiles}
                 disabled={placedTiles.length === 0}
-                className="px-6 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white rounded-lg font-semibold transition-colors"
+                className="px-8 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors shadow-lg"
               >
                 Recall Tiles
               </button>
