@@ -86,7 +86,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         const playerOrder = players ? players.length : 0;
         
         // Draw initial tiles for new player
-        const tileBagArray = Array.isArray(game.tile_bag) ? game.tile_bag as Tile[] : [];
+        const tileBagArray = Array.isArray(game.tile_bag) ? game.tile_bag as unknown as Tile[] : [];
         const playerTiles = drawTiles([...tileBagArray], 7);
         const remainingTiles = tileBagArray.slice(7);
 
@@ -150,15 +150,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           id: p.id,
           name: p.player_name,
           score: p.score,
-          tiles: Array.isArray(p.tiles) ? p.tiles as Tile[] : [],
+          tiles: Array.isArray(p.tiles) ? p.tiles as unknown as Tile[] : [],
           isConnected: p.is_connected
         }));
 
         setGameState({
-          board: Array.isArray(game.board) ? game.board as (Tile | null)[][] : Array(15).fill(null).map(() => Array(15).fill(null)),
+          board: Array.isArray(game.board) ? game.board as unknown as (Tile | null)[][] : Array(15).fill(null).map(() => Array(15).fill(null)),
           players: gameStatePlayers,
           currentPlayerIndex: game.current_player_index,
-          tileBag: Array.isArray(game.tile_bag) ? game.tile_bag as Tile[] : [],
+          tileBag: Array.isArray(game.tile_bag) ? game.tile_bag as unknown as Tile[] : [],
           gameStarted: game.game_started,
           gameOver: game.game_over,
           chatMessages: []
