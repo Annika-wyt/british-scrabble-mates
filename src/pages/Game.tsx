@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -42,7 +41,9 @@ const Game = () => {
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
+    updateAnyPlayerScore,
     updateTileBag,
+    drawTilesForPlayer,
     nextTurn,
     refreshGameState,
     setPendingChallengeInGame,
@@ -429,6 +430,10 @@ const Game = () => {
       // Update player score
       await updatePlayerScore(newScore);
 
+      // Draw new tiles to replenish the rack
+      const tilesUsed = placedTilesThisTurn.length;
+      await drawTilesForPlayer(currentPlayer.id, tilesUsed);
+
       // Create pending challenge data
       const pendingChallenge = {
         originalPlayerId: currentPlayer.id,
@@ -442,7 +447,7 @@ const Game = () => {
       // Clear placed tiles tracking
       setPlacedTilesThisTurn([]);
       
-      toast.success(`Word submitted! Score: +${score} points. Opponents can challenge within 30 seconds.`);
+      toast.success(`Word submitted! Score: +${score} points. Drew ${tilesUsed} new tiles. Opponents can challenge within 30 seconds.`);
       
       // Auto-advance turn after challenge period (30 seconds)
       setTimeout(async () => {
@@ -491,12 +496,14 @@ const Game = () => {
       const validation = await validateAllWordsFormed(challenge.placedTiles, gameState.board);
       
       if (validation.isValid) {
-        // Challenge failed - challenger loses turn
-        toast.error(`Challenge failed! All words are valid: ${validation.invalidWords.length === 0 ? 'No invalid words found' : ''}`);
+        // Challenge failed - challenger loses turn, original player keeps their turn
+        toast.error(`Challenge failed! All words are valid. You lose your turn.`);
         
-        // Clear the challenge and advance turn normally
+        // Clear the challenge but don't advance turn - let the original player continue
         await clearPendingChallengeInGame();
-        await nextTurn();
+        
+        // Don't call nextTurn() here - the original player should retain their turn
+        // The turn will advance naturally when they finish their move
       } else {
         // Challenge succeeded - original player loses points and turn
         toast.success(`Challenge succeeded! Invalid words: ${validation.invalidWords.join(', ')}`);
@@ -505,7 +512,7 @@ const Game = () => {
         const originalPlayer = players.find(p => p.id === challenge.originalPlayerId);
         if (originalPlayer) {
           const newScore = Math.max(0, originalPlayer.score - challenge.score);
-          // Update the original player's score (this would need to be implemented to update any player's score)
+          await updateAnyPlayerScore(originalPlayer.id, newScore);
         }
 
         // Remove the placed tiles from the board
@@ -515,7 +522,7 @@ const Game = () => {
         });
         await updateGameBoard(newBoard);
 
-        // Clear the challenge and advance turn
+        // Clear the challenge and advance turn normally
         await clearPendingChallengeInGame();
         await nextTurn();
       }

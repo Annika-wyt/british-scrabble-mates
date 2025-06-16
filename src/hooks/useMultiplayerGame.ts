@@ -351,6 +351,44 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
   }, [game, roomCode, queryClient]);
 
+  // New function to draw tiles for a player after submitting a word
+  const drawTilesForPlayer = useCallback(async (playerId: string, tilesUsed: number) => {
+    if (!game) return;
+    
+    const player = players?.find(p => p.id === playerId);
+    if (!player) return;
+    
+    const tilesToDraw = Math.min(tilesUsed, game.tile_bag.length);
+    const drawnTiles = game.tile_bag.slice(0, tilesToDraw);
+    const remainingBag = game.tile_bag.slice(tilesToDraw);
+    
+    const newPlayerTiles = [...player.tiles, ...drawnTiles];
+    
+    // Update player tiles and tile bag
+    const { error: playerError } = await supabase
+      .from('game_players')
+      .update({ tiles: newPlayerTiles as any })
+      .eq('id', playerId);
+    
+    if (playerError) {
+      console.error('Error updating player tiles after draw:', playerError);
+      throw playerError;
+    }
+    
+    const { error: bagError } = await supabase
+      .from('games')
+      .update({ tile_bag: remainingBag as any })
+      .eq('id', game.id);
+    
+    if (bagError) {
+      console.error('Error updating tile bag after draw:', bagError);
+      throw bagError;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['players', game.id] });
+    queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
+  }, [game, players, roomCode, queryClient]);
+
   const nextTurn = useCallback(async () => {
     if (!game || !players) return;
     
@@ -481,6 +519,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     updatePlayerScore,
     updateAnyPlayerScore,
     updateTileBag,
+    drawTilesForPlayer,
     nextTurn,
     refreshGameState,
     setPendingChallengeInGame,
