@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { GameState, Player, Tile } from "@/types/game";
@@ -25,6 +26,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const { toast } = useToast();
+  
+  // Use refs to avoid dependency issues in useEffect
+  const gameIdRef = useRef<string | null>(null);
+  const playerIdRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    gameIdRef.current = gameId;
+    playerIdRef.current = playerId;
+  }, [gameId, playerId]);
 
   const createOrJoinGame = useCallback(async () => {
     console.log('Starting createOrJoinGame with:', { roomCode, playerName });
@@ -184,8 +194,8 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   }, [roomCode, playerName, toast]);
 
   const loadGameState = useCallback(async (gameIdParam?: string, playerIdParam?: string) => {
-    const currentGameId = gameIdParam || gameId;
-    const currentPlayerId = playerIdParam || playerId;
+    const currentGameId = gameIdParam || gameIdRef.current;
+    const currentPlayerId = playerIdParam || playerIdRef.current;
     
     if (!currentGameId) {
       console.log('No game ID available for loading state');
@@ -230,15 +240,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           isConnected: p.is_connected
         }));
 
-        setGameState(prevState => ({
-          ...prevState,
+        setGameState({
           board: Array.isArray(game.board) ? game.board as unknown as (Tile | null)[][] : Array(15).fill(null).map(() => Array(15).fill(null)),
           players: gameStatePlayers,
           currentPlayerIndex: game.current_player_index,
           tileBag: Array.isArray(game.tile_bag) ? game.tile_bag as unknown as Tile[] : [],
           gameStarted: game.game_started,
-          gameOver: game.game_over
-        }));
+          gameOver: game.game_over,
+          chatMessages: []
+        });
 
         // Set current player
         if (currentPlayerId) {
@@ -253,10 +263,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       console.error('Error loading game state:', error);
       setConnectionError('Failed to load game state');
     }
-  }, [gameId, playerId]);
+  }, []);
+
+  // Create a refreshGameState function that can be called manually
+  const refreshGameState = useCallback(async () => {
+    await loadGameState();
+  }, [loadGameState]);
 
   const updateGameBoard = useCallback(async (newBoard: (Tile | null)[][]) => {
-    if (!gameId) return;
+    if (!gameIdRef.current) return;
 
     try {
       console.log('Updating board in database');
@@ -266,7 +281,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           board: newBoard as any,
           updated_at: new Date().toISOString()
         })
-        .eq('id', gameId);
+        .eq('id', gameIdRef.current);
 
       if (error) {
         console.error('Error updating board:', error);
@@ -275,17 +290,17 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     } catch (error) {
       console.error('Error updating board:', error);
     }
-  }, [gameId]);
+  }, []);
 
   const updatePlayerTiles = useCallback(async (tiles: Tile[]) => {
-    if (!playerId) return;
+    if (!playerIdRef.current) return;
 
     try {
       console.log('Updating player tiles in database');
       const { error } = await supabase
         .from('game_players')
         .update({ tiles: tiles as any })
-        .eq('id', playerId);
+        .eq('id', playerIdRef.current);
 
       if (error) {
         console.error('Error updating player tiles:', error);
@@ -294,17 +309,17 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     } catch (error) {
       console.error('Error updating player tiles:', error);
     }
-  }, [playerId]);
+  }, []);
 
   const updatePlayerScore = useCallback(async (score: number) => {
-    if (!playerId) return;
+    if (!playerIdRef.current) return;
 
     try {
       console.log('Updating player score in database');
       const { error } = await supabase
         .from('game_players')
         .update({ score })
-        .eq('id', playerId);
+        .eq('id', playerIdRef.current);
 
       if (error) {
         console.error('Error updating player score:', error);
@@ -313,10 +328,10 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     } catch (error) {
       console.error('Error updating player score:', error);
     }
-  }, [playerId]);
+  }, []);
 
   const nextTurn = useCallback(async () => {
-    if (!gameId || !gameState.players.length) return;
+    if (!gameIdRef.current || !gameState.players.length) return;
 
     try {
       console.log('Moving to next turn');
@@ -328,7 +343,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           current_player_index: nextPlayerIndex,
           updated_at: new Date().toISOString()
         })
-        .eq('id', gameId);
+        .eq('id', gameIdRef.current);
 
       if (error) {
         console.error('Error updating turn:', error);
@@ -337,28 +352,30 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     } catch (error) {
       console.error('Error moving to next turn:', error);
     }
-  }, [gameId, gameState.currentPlayerIndex, gameState.players.length]);
+  }, [gameState.currentPlayerIndex, gameState.players.length]);
 
-  // Set up real-time subscriptions
+  // Set up real-time subscriptions with improved error handling
   useEffect(() => {
-    if (!gameId) return;
+    const currentGameId = gameIdRef.current;
+    if (!currentGameId) return;
 
-    console.log('Setting up real-time subscriptions for game:', gameId);
+    console.log('Setting up real-time subscriptions for game:', currentGameId);
 
     // Create a channel specifically for this game
     const gameChannel = supabase
-      .channel(`game-updates-${gameId}`)
+      .channel(`game-updates-${currentGameId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'games',
-          filter: `id=eq.${gameId}`
+          filter: `id=eq.${currentGameId}`
         },
         (payload) => {
           console.log('Game table change detected:', payload.eventType);
-          loadGameState();
+          // Use timeout to avoid immediate recursive calls
+          setTimeout(() => loadGameState(), 100);
         }
       )
       .on(
@@ -367,20 +384,25 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           event: '*',
           schema: 'public',
           table: 'game_players',
-          filter: `game_id=eq.${gameId}`
+          filter: `game_id=eq.${currentGameId}`
         },
         (payload) => {
           console.log('Players table change detected:', payload.eventType);
-          loadGameState();
+          // Use timeout to avoid immediate recursive calls
+          setTimeout(() => loadGameState(), 100);
         }
       )
       .subscribe((status) => {
         console.log('Subscription status:', status);
         if (status === 'SUBSCRIBED') {
           console.log('Successfully subscribed to real-time updates');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('Channel subscription error');
-          setConnectionError('Real-time connection failed');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Channel subscription error or timeout:', status);
+          // Try to reconnect after a delay
+          setTimeout(() => {
+            console.log('Attempting to reconnect real-time subscription');
+            loadGameState();
+          }, 2000);
         }
       });
 
@@ -388,7 +410,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       console.log('Cleaning up real-time subscriptions');
       supabase.removeChannel(gameChannel);
     };
-  }, [gameId, loadGameState]);
+  }, [gameId]); // Only depend on gameId, not loadGameState
 
   // Initialize game on mount
   useEffect(() => {
@@ -405,6 +427,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     updatePlayerTiles,
     updatePlayerScore,
     nextTurn,
+    refreshGameState,
     isReady: !!gameId && !!playerId && !isLoading,
     isLoading,
     connectionError

@@ -26,6 +26,7 @@ const Game = () => {
     updatePlayerTiles,
     updatePlayerScore,
     nextTurn,
+    refreshGameState,
     isReady,
     isLoading,
     connectionError
@@ -75,7 +76,7 @@ const Game = () => {
     const newBoard = gameState.board.map(boardRow => [...boardRow]);
     newBoard[row][col] = tile;
     
-    // Update board in database
+    // Update board in database and refresh state
     await updateGameBoard(newBoard);
 
     // Remove tile from player's rack
@@ -84,6 +85,9 @@ const Game = () => {
       console.log('Updated player tiles:', updatedTiles.length, 'tiles remaining');
       await updatePlayerTiles(updatedTiles);
     }
+
+    // Refresh game state to ensure UI is updated
+    await refreshGameState();
   };
 
   const handleTileReturn = async (tile: Tile) => {
@@ -92,6 +96,9 @@ const Game = () => {
     console.log('Returning tile to rack:', { letter: tile.letter, id: tile.id });
     const updatedTiles = [...currentPlayer.tiles, tile];
     await updatePlayerTiles(updatedTiles);
+    
+    // Refresh game state to ensure UI is updated
+    await refreshGameState();
   };
 
   const submitWord = async () => {
@@ -129,6 +136,9 @@ const Game = () => {
         setPlacedTiles([]);
         await nextTurn();
         
+        // Refresh game state to ensure board updates for all players
+        await refreshGameState();
+        
         toast({
           title: "Word accepted!",
           description: `You scored ${score} points! It's now the next player's turn.`
@@ -144,6 +154,9 @@ const Game = () => {
       }
       
       setPlacedTiles([]);
+      
+      // Refresh game state
+      await refreshGameState();
       
       toast({
         title: "Invalid word",
@@ -177,6 +190,9 @@ const Game = () => {
     }
     
     setPlacedTiles([]);
+    
+    // Refresh game state
+    await refreshGameState();
     
     toast({
       title: "Tiles recalled",
@@ -252,7 +268,7 @@ const Game = () => {
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Tiles</h3>
               <PlayerRack
-                tiles={currentPlayer.tiles}
+                tiles={currentPlayer?.tiles || []}
                 onTileSelect={() => {}}
               />
             </div>
