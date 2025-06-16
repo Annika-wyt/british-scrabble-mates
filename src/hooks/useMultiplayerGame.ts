@@ -4,26 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { GameState, Player, Tile } from "@/types/game";
 import { generateInitialTiles, drawTiles } from "@/utils/tileUtils";
+import { Database } from "@/integrations/supabase/types";
 
-interface DatabaseGame {
-  id: string;
-  room_code: string;
-  board: any[];
-  current_player_index: number;
-  tile_bag: any[];
-  game_started: boolean;
-  game_over: boolean;
-}
-
-interface DatabasePlayer {
-  id: string;
-  game_id: string;
-  player_name: string;
-  score: number;
-  tiles: any[];
-  player_order: number;
-  is_connected: boolean;
-}
+type DbGame = Database['public']['Tables']['games']['Row'];
+type DbPlayer = Database['public']['Tables']['game_players']['Row'];
 
 export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   const [gameState, setGameState] = useState<GameState>({
@@ -50,7 +34,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         .eq('room_code', roomCode)
         .single();
 
-      let game: DatabaseGame;
+      let game: DbGame;
 
       if (existingGame) {
         game = existingGame;
@@ -62,8 +46,8 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           .from('games')
           .insert({
             room_code: roomCode,
-            board: Array(15).fill(null).map(() => Array(15).fill(null)),
-            tile_bag: tileBag,
+            board: Array(15).fill(null).map(() => Array(15).fill(null)) as any,
+            tile_bag: tileBag as any,
             current_player_index: 0,
             game_started: false
           })
@@ -83,7 +67,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         .eq('player_name', playerName)
         .single();
 
-      let player: DatabasePlayer;
+      let player: DbPlayer;
 
       if (existingPlayer) {
         player = existingPlayer;
@@ -102,8 +86,9 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         const playerOrder = players ? players.length : 0;
         
         // Draw initial tiles for new player
-        const playerTiles = drawTiles([...game.tile_bag], 7);
-        const remainingTiles = game.tile_bag.slice(7);
+        const tileBagArray = Array.isArray(game.tile_bag) ? game.tile_bag as Tile[] : [];
+        const playerTiles = drawTiles([...tileBagArray], 7);
+        const remainingTiles = tileBagArray.slice(7);
 
         // Create new player
         const { data: newPlayer, error } = await supabase
@@ -111,7 +96,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           .insert({
             game_id: game.id,
             player_name: playerName,
-            tiles: playerTiles,
+            tiles: playerTiles as any,
             player_order: playerOrder,
             score: 0,
             is_connected: true
@@ -125,7 +110,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         // Update game's tile bag
         await supabase
           .from('games')
-          .update({ tile_bag: remainingTiles })
+          .update({ tile_bag: remainingTiles as any })
           .eq('id', game.id);
       }
 
@@ -165,15 +150,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           id: p.id,
           name: p.player_name,
           score: p.score,
-          tiles: p.tiles || [],
+          tiles: Array.isArray(p.tiles) ? p.tiles as Tile[] : [],
           isConnected: p.is_connected
         }));
 
         setGameState({
-          board: game.board || Array(15).fill(null).map(() => Array(15).fill(null)),
+          board: Array.isArray(game.board) ? game.board as (Tile | null)[][] : Array(15).fill(null).map(() => Array(15).fill(null)),
           players: gameStatePlayers,
           currentPlayerIndex: game.current_player_index,
-          tileBag: game.tile_bag || [],
+          tileBag: Array.isArray(game.tile_bag) ? game.tile_bag as Tile[] : [],
           gameStarted: game.game_started,
           gameOver: game.game_over,
           chatMessages: []
@@ -199,7 +184,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       await supabase
         .from('games')
         .update({ 
-          board: newBoard,
+          board: newBoard as any,
           updated_at: new Date().toISOString()
         })
         .eq('id', gameId);
@@ -214,7 +199,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     try {
       await supabase
         .from('game_players')
-        .update({ tiles })
+        .update({ tiles: tiles as any })
         .eq('id', playerId);
     } catch (error) {
       console.error('Error updating player tiles:', error);
