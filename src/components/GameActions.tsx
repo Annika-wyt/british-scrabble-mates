@@ -31,15 +31,15 @@ const GameActions = ({
     <Card className="mt-4">
       <CardContent className="p-4">
         <div className="flex flex-wrap gap-2">
-          {/* Challenge button - only show when it's not your turn and there's a word to challenge */}
-          {!isCurrentTurn && canChallenge && (
+          {/* Challenge button - only show when there's a word to challenge */}
+          {canChallenge && (
             <Button
               onClick={onChallenge}
               variant="destructive"
               className="flex items-center gap-2"
             >
               <AlertTriangle className="w-4 h-4" />
-              Challenge
+              Challenge Word
             </Button>
           )}
 
@@ -93,7 +93,9 @@ const GameActions = ({
 
         {/* Turn indicator */}
         <div className="mt-3 text-sm text-center">
-          {isCurrentTurn ? (
+          {canChallenge ? (
+            <span className="text-red-600 font-semibold">Word can be challenged! Click "Challenge Word" if you think it's invalid.</span>
+          ) : isCurrentTurn ? (
             <span className="text-green-600 font-semibold">Your Turn</span>
           ) : (
             <span className="text-gray-500">Waiting for other player...</span>

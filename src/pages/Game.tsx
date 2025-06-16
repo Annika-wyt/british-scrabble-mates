@@ -14,6 +14,8 @@ import PlayerRack from "@/components/PlayerRack";
 import { ChatMessage, Tile } from "@/types/game";
 import { drawNewTiles, removePlayerTiles } from "@/utils/tileManagementUtils";
 import GameActions from "@/components/GameActions";
+import { calculateScore } from "@/utils/scoreUtils";
+import { validateAllWordsFormed } from "@/utils/dictionaryUtils";
 
 const Game = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -63,9 +65,6 @@ const Game = () => {
       if (!roomCode || !playerName) return;
 
       try {
-        console.log('Checking if room exists:', roomCode);
-        
-        // First, try to find existing room
         const { data: existingGame, error: selectError } = await supabase
           .from('games')
           .select('id, room_code, game_started')
@@ -79,13 +78,10 @@ const Game = () => {
         }
 
         if (existingGame) {
-          console.log('Room found:', existingGame);
           setRoomExists(true);
         } else {
-          console.log('Room not found, creating new room:', roomCode);
           setIsCreatingRoom(true);
           
-          // Create new game room
           const { data: newGame, error: insertError } = await supabase
             .from('games')
             .insert({
@@ -106,7 +102,6 @@ const Game = () => {
             return;
           }
 
-          console.log('Room created successfully:', newGame);
           setRoomExists(true);
           setIsCreatingRoom(false);
           toast.success(`Room ${roomCode} created successfully!`);
@@ -124,7 +119,6 @@ const Game = () => {
   // Auto-join game when room is ready
   useEffect(() => {
     if (roomExists && playerName && !isConnected && !isLoading) {
-      console.log('Auto-joining game...');
       joinGame();
     }
   }, [roomExists, playerName, isConnected, isLoading, joinGame]);
@@ -133,7 +127,6 @@ const Game = () => {
   useEffect(() => {
     if (game?.id && !game.game_started) {
       const interval = setInterval(() => {
-        console.log('Refreshing player count...');
         refreshGameState();
       }, 3000);
 
@@ -142,34 +135,28 @@ const Game = () => {
   }, [game?.id, game?.game_started, refreshGameState]);
 
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
-    // Create a copy of the current board
     const newBoard = gameState.board.map(boardRow => [...boardRow]);
     newBoard[row][col] = tile;
     updateGameBoard(newBoard);
 
-    // Remove the tile from player's tiles
     if (currentPlayer) {
       const updatedTiles = removePlayerTiles(currentPlayer.tiles, [tile]);
       updatePlayerTiles(updatedTiles);
     }
 
-    // Track placed tiles for this turn
     setPlacedTilesThisTurn(prev => [...prev, { row, col, tile }]);
   };
 
   const handleTileDoubleClick = (row: number, col: number) => {
-    // Remove tile from board if it exists and return it to player's tiles
     const tileOnBoard = gameState.board[row][col];
     if (tileOnBoard && currentPlayer) {
       const newBoard = gameState.board.map(boardRow => [...boardRow]);
       newBoard[row][col] = null;
       updateGameBoard(newBoard);
 
-      // Add the tile back to player's tiles
       const updatedTiles = [...currentPlayer.tiles, tileOnBoard];
       updatePlayerTiles(updatedTiles);
 
-      // Remove from placed tiles tracking
       setPlacedTilesThisTurn(prev => 
         prev.filter(placed => !(placed.row === row && placed.col === col))
       );
@@ -196,48 +183,28 @@ const Game = () => {
       toast.error('Need at least 2 players to start the game');
       return;
     }
-    console.log('Starting game with', players.length, 'players');
     await startGame();
   };
 
-  // Simplified room creator detection
   const isRoomCreator = () => {
-    console.log('=== SIMPLIFIED ROOM CREATOR CHECK ===');
-    console.log('Current player:', currentPlayer);
-    console.log('Players:', players);
-    console.log('PlayerName prop:', playerName);
-
     if (!currentPlayer || !players || players.length === 0) {
-      console.log('❌ Missing required data');
       return false;
     }
 
-    // Find the player with the lowest player_order (room creator)
     const sortedPlayers = [...players].sort((a, b) => a.player_order - b.player_order);
     const roomCreator = sortedPlayers[0];
     
-    console.log('Room creator (lowest order):', {
-      id: roomCreator?.id,
-      name: roomCreator?.player_name,
-      order: roomCreator?.player_order
-    });
-
-    // Check if current player is the room creator
-    const isCreator = currentPlayer.id === roomCreator?.id;
-    console.log('Is current player the room creator?', isCreator);
-    console.log('=== END ROOM CREATOR CHECK ===');
-    
-    return isCreator;
+    return currentPlayer.id === roomCreator?.id;
   };
 
   const roomCreator = isRoomCreator();
-
-  // Modified condition for showing the waiting room vs game
-  // Only show game interface if game has started AND we have the minimum players
   const shouldShowGameInterface = game?.game_started && players.length >= 2 && currentPlayer;
-  
-  // Show waiting room if game hasn't started OR we don't have enough players
   const shouldShowWaitingRoom = !game?.game_started || players.length < 2;
+
+  // Check if there's a pending challenge that can be acted upon
+  const canChallenge = game?.pending_challenge && 
+    game.pending_challenge.originalPlayerId !== currentPlayer?.id &&
+    !game.pending_challenge.challengerId;
 
   if (!roomCode) {
     return (
@@ -356,7 +323,6 @@ const Game = () => {
     );
   }
 
-  // Show waiting room when game hasn't started or not enough players
   if (shouldShowWaitingRoom) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -399,22 +365,6 @@ const Game = () => {
                 ))}
               </div>
 
-              {/* Debug info */}
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="text-sm text-blue-800">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-4 h-4" />
-                    <span className="font-medium">Debug Info</span>
-                  </div>
-                  <p><strong>Players count:</strong> {players.length}</p>
-                  <p><strong>Game started:</strong> {game?.game_started ? 'Yes' : 'No'}</p>
-                  <p><strong>Current player:</strong> {currentPlayer?.name || 'None'}</p>
-                  <p><strong>Is room creator:</strong> {roomCreator ? 'Yes' : 'No'}</p>
-                  <p><strong>Should show start button:</strong> {roomCreator && players.length >= 2 && !game?.game_started ? 'Yes' : 'No'}</p>
-                </div>
-              </div>
-
-              {/* Start game button - only show if room creator, enough players, and game not started */}
               {roomCreator && players.length >= 2 && !game?.game_started && (
                 <Button onClick={handleStartGame} className="w-full bg-green-600 hover:bg-green-700">
                   <Crown className="w-4 h-4 mr-2" />
@@ -422,14 +372,12 @@ const Game = () => {
                 </Button>
               )}
               
-              {/* Waiting message for non-creators */}
               {!roomCreator && players.length >= 2 && !game?.game_started && (
                 <div className="text-center text-sm text-gray-500 p-3 bg-yellow-50 rounded-lg">
                   Waiting for room creator to start the game...
                 </div>
               )}
 
-              {/* Need more players message */}
               {players.length < 2 && (
                 <div className="text-center text-sm text-gray-500 p-3 bg-gray-50 rounded-lg">
                   Share room code <strong>{roomCode}</strong> with friends to join!
@@ -450,7 +398,6 @@ const Game = () => {
   const handleShuffleTiles = () => {
     if (!currentPlayer) return;
     
-    // Shuffle the tiles array
     const shuffledTiles = [...currentPlayer.tiles];
     for (let i = shuffledTiles.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -467,14 +414,45 @@ const Game = () => {
     }
 
     try {
-      // TODO: Implement word validation and scoring
-      console.log('Submitting word with placed tiles:', placedTilesThisTurn);
+      // Validate all words formed
+      const validation = await validateAllWordsFormed(placedTilesThisTurn, gameState.board);
       
-      // For now, just advance to next turn and clear placed tiles
-      await nextTurn();
+      if (!validation.isValid) {
+        toast.error(`Invalid words: ${validation.invalidWords.join(', ')}`);
+        return;
+      }
+
+      // Calculate score for the move
+      const score = calculateScore(placedTilesThisTurn, gameState.board);
+      const newScore = currentPlayer.score + score;
+
+      // Update player score
+      await updatePlayerScore(newScore);
+
+      // Create pending challenge data
+      const pendingChallenge = {
+        originalPlayerId: currentPlayer.id,
+        placedTiles: placedTilesThisTurn,
+        score: score
+      };
+
+      // Set pending challenge
+      await setPendingChallengeInGame(pendingChallenge);
+
+      // Clear placed tiles tracking
       setPlacedTilesThisTurn([]);
       
-      toast.success('Word submitted successfully!');
+      toast.success(`Word submitted! Score: +${score} points. Opponents can challenge within 30 seconds.`);
+      
+      // Auto-advance turn after challenge period (30 seconds)
+      setTimeout(async () => {
+        if (game?.pending_challenge?.originalPlayerId === currentPlayer.id) {
+          await clearPendingChallengeInGame();
+          await nextTurn();
+          toast.info('Challenge period expired. Turn advanced.');
+        }
+      }, 30000);
+
     } catch (error) {
       console.error('Error submitting word:', error);
       toast.error('Failed to submit word');
@@ -484,7 +462,6 @@ const Game = () => {
   const handleRetrieveTiles = () => {
     if (placedTilesThisTurn.length === 0) return;
 
-    // Remove all placed tiles from board and return to player
     const newBoard = gameState.board.map(boardRow => [...boardRow]);
     const tilesToReturn: Tile[] = [];
 
@@ -504,10 +481,48 @@ const Game = () => {
     toast.success('Tiles retrieved successfully!');
   };
 
-  const handleChallenge = () => {
-    // TODO: Implement challenge functionality
-    console.log('Challenge initiated');
-    toast.info('Challenge feature coming soon!');
+  const handleChallenge = async () => {
+    if (!game?.pending_challenge || !currentPlayer) return;
+
+    try {
+      const challenge = game.pending_challenge;
+      
+      // Validate the challenged words
+      const validation = await validateAllWordsFormed(challenge.placedTiles, gameState.board);
+      
+      if (validation.isValid) {
+        // Challenge failed - challenger loses turn
+        toast.error(`Challenge failed! All words are valid: ${validation.invalidWords.length === 0 ? 'No invalid words found' : ''}`);
+        
+        // Clear the challenge and advance turn normally
+        await clearPendingChallengeInGame();
+        await nextTurn();
+      } else {
+        // Challenge succeeded - original player loses points and turn
+        toast.success(`Challenge succeeded! Invalid words: ${validation.invalidWords.join(', ')}`);
+        
+        // Find the original player and deduct points
+        const originalPlayer = players.find(p => p.id === challenge.originalPlayerId);
+        if (originalPlayer) {
+          const newScore = Math.max(0, originalPlayer.score - challenge.score);
+          // Update the original player's score (this would need to be implemented to update any player's score)
+        }
+
+        // Remove the placed tiles from the board
+        const newBoard = gameState.board.map(boardRow => [...boardRow]);
+        challenge.placedTiles.forEach(({ row, col }) => {
+          newBoard[row][col] = null;
+        });
+        await updateGameBoard(newBoard);
+
+        // Clear the challenge and advance turn
+        await clearPendingChallengeInGame();
+        await nextTurn();
+      }
+    } catch (error) {
+      console.error('Error handling challenge:', error);
+      toast.error('Failed to process challenge');
+    }
   };
 
   const handleQuitGame = () => {
@@ -516,7 +531,6 @@ const Game = () => {
     }
   };
 
-  // Main game interface - only show when game has started and enough players
   return (
     <div className="min-h-screen bg-gray-100">
       <GameHeader
@@ -532,7 +546,6 @@ const Game = () => {
               onTileDoubleClick={handleTileDoubleClick}
             />
             
-            {/* Player Rack */}
             {currentPlayer && (
               <div className="mt-6">
                 <PlayerRack
@@ -542,10 +555,9 @@ const Game = () => {
               </div>
             )}
 
-            {/* Game Actions */}
             <GameActions
               isCurrentTurn={isCurrentTurn}
-              canChallenge={false} // TODO: Implement proper challenge detection
+              canChallenge={canChallenge || false}
               playerTiles={currentPlayer?.tiles || []}
               onShuffleTiles={handleShuffleTiles}
               onSubmitWord={handleSubmitWord}

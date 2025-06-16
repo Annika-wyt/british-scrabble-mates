@@ -77,12 +77,6 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       }
       
       console.log('Players fetched successfully:', data);
-      console.log('Players debug - raw data:', data.map(p => ({
-        id: p.id,
-        player_name: p.player_name,
-        player_order: p.player_order,
-        is_connected: p.is_connected
-      })));
       
       // Convert database data to GamePlayer type with proper type casting and computed properties
       return data.map(player => ({
@@ -135,19 +129,9 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     }
   }, [game, players]);
 
-  // Enhanced current player detection with debug logging
+  // Enhanced current player detection
   const getCurrentPlayer = useCallback(() => {
-    console.log('=== CURRENT PLAYER DETECTION DEBUG ===');
-    console.log('PlayerName from prop:', playerName);
-    console.log('Players array:', players?.map(p => ({
-      id: p.id,
-      player_name: p.player_name,
-      name: p.name || p.player_name,
-      order: p.player_order
-    })));
-
     if (!players || !playerName) {
-      console.log('❌ No players or playerName');
       return null;
     }
 
@@ -156,13 +140,6 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     if (!foundPlayer) {
       foundPlayer = players.find(p => p.name === playerName);
     }
-
-    console.log('Found player:', foundPlayer ? {
-      id: foundPlayer.id,
-      player_name: foundPlayer.player_name,
-      name: foundPlayer.name,
-      order: foundPlayer.player_order
-    } : 'NOT FOUND');
 
     if (foundPlayer) {
       // Convert to Player type for consistency
@@ -175,13 +152,9 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         // Keep original properties for compatibility
         player_name: foundPlayer.player_name
       };
-      console.log('✅ Returning current player:', playerResult);
-      console.log('=== END CURRENT PLAYER DEBUG ===');
       return playerResult;
     }
 
-    console.log('❌ No current player found');
-    console.log('=== END CURRENT PLAYER DEBUG ===');
     return null;
   }, [players, playerName]);
 
@@ -347,6 +320,21 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
   }, [getCurrentPlayer, game?.id, queryClient]);
 
+  // New function to update any player's score (for challenges)
+  const updateAnyPlayerScore = useCallback(async (playerId: string, newScore: number) => {
+    const { error } = await supabase
+      .from('game_players')
+      .update({ score: newScore })
+      .eq('id', playerId);
+    
+    if (error) {
+      console.error('Error updating player score:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
+  }, [game?.id, queryClient]);
+
   const updateTileBag = useCallback(async (newTileBag: Tile[]) => {
     if (!game) return;
     
@@ -491,6 +479,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
+    updateAnyPlayerScore,
     updateTileBag,
     nextTurn,
     refreshGameState,
