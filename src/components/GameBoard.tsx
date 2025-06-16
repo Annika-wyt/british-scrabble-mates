@@ -7,6 +7,7 @@ import BlankTileSelector from "./BlankTileSelector";
 interface GameBoardProps {
   board: (Tile | null)[][];
   onTilePlacement: (row: number, col: number, tile: Tile) => void;
+  onTileDoubleClick?: (row: number, col: number) => void;
 }
 
 const getBoardSquare = (row: number, col: number): BoardSquare => {
@@ -94,7 +95,7 @@ const getSquareLabel = (square: BoardSquare) => {
   }
 };
 
-const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
+const GameBoard = ({ board, onTilePlacement, onTileDoubleClick }: GameBoardProps) => {
   const [dragOverSquare, setDragOverSquare] = useState<{row: number, col: number} | null>(null);
   const [pendingBlankTile, setPendingBlankTile] = useState<{
     row: number;
@@ -174,6 +175,12 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
     setPendingBlankTile(null);
   };
 
+  const handleTileDoubleClick = (row: number, col: number) => {
+    if (onTileDoubleClick) {
+      onTileDoubleClick(row, col);
+    }
+  };
+
   return (
     <div className="flex justify-center">
       <div className="grid grid-cols-15 gap-px p-4 bg-gray-300 rounded-2xl shadow-xl">
@@ -197,6 +204,7 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
                 onDragEnter={(e) => handleDragEnter(e, rowIndex, colIndex)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, rowIndex, colIndex)}
+                onDoubleClick={() => handleTileDoubleClick(rowIndex, colIndex)}
               >
                 {tile ? (
                   <div className="font-bold flex flex-col items-center leading-none">
