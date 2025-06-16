@@ -22,6 +22,7 @@ const Game = () => {
 
   const [playerName, setPlayerName] = useState<string>("");
   const [placedTiles, setPlacedTiles] = useState<{row: number, col: number, tile: Tile}[]>([]);
+  const [localBoard, setLocalBoard] = useState<(Tile | null)[][]>(Array(15).fill(null).map(() => Array(15).fill(null)));
   const [blankTileSelector, setBlankTileSelector] = useState<{
     isOpen: boolean;
     tileId: string | null;
@@ -48,6 +49,24 @@ const Game = () => {
     isLoading,
     connectionError
   } = useMultiplayerGame(roomCode || "", playerName);
+
+  // Update local board when game state changes, but preserve local changes for current player
+  useEffect(() => {
+    if (!isMyTurn()) {
+      // If it's not our turn, sync with the server board completely
+      setLocalBoard(gameState.board.map(row => [...row]));
+    } else {
+      // If it's our turn, only update squares that aren't locally modified
+      const newLocalBoard = gameState.board.map(row => [...row]);
+      
+      // Apply our placed tiles to the local board
+      for (const { row, col, tile } of placedTiles) {
+        newLocalBoard[row][col] = tile;
+      }
+      
+      setLocalBoard(newLocalBoard);
+    }
+  }, [gameState.board, placedTiles]);
 
   useEffect(() => {
     const storedPlayerName = localStorage.getItem("playerName");
@@ -93,23 +112,21 @@ const Game = () => {
       return;
     }
 
-    console.log('Placing tile:', { row, col, tile: tile.letter, tileId: tile.id });
+    console.log('Placing tile locally:', { row, col, tile: tile.letter, tileId: tile.id });
 
     // Add to placed tiles for tracking
     const newPlacedTiles = [...placedTiles, { row, col, tile }];
     setPlacedTiles(newPlacedTiles);
 
-    // Update board immediately for local state
-    const newBoard = gameState.board.map(boardRow => [...boardRow]);
-    newBoard[row][col] = tile;
-    
-    // Update board in database and refresh state
-    await updateGameBoard(newBoard);
+    // Update local board only (not synced to database yet)
+    const newLocalBoard = localBoard.map(boardRow => [...boardRow]);
+    newLocalBoard[row][col] = tile;
+    setLocalBoard(newLocalBoard);
 
-    // Remove tile from player's rack
+    // Remove tile from player's rack locally
     if (currentPlayer) {
       const updatedTiles = currentPlayer.tiles.filter(t => t.id !== tile.id);
-      console.log('Updated player tiles:', updatedTiles.length, 'tiles remaining');
+      console.log('Updated player tiles locally:', updatedTiles.length, 'tiles remaining');
       await updatePlayerTiles(updatedTiles);
     }
 
@@ -139,14 +156,14 @@ const Game = () => {
       letter: letter // Display the chosen letter
     };
 
-    // Place the tile
+    // Place the tile locally
     const newPlacedTiles = [...placedTiles, { row, col, tile: updatedTile }];
     setPlacedTiles(newPlacedTiles);
 
-    // Update board
-    const newBoard = gameState.board.map(boardRow => [...boardRow]);
-    newBoard[row][col] = updatedTile;
-    await updateGameBoard(newBoard);
+    // Update local board
+    const newLocalBoard = localBoard.map(boardRow => [...boardRow]);
+    newLocalBoard[row][col] = updatedTile;
+    setLocalBoard(newLocalBoard);
 
     // Remove tile from player's rack
     const updatedPlayerTiles = currentPlayer.tiles.filter(t => t.id !== blankTileSelector.tileId);
@@ -177,10 +194,10 @@ const Game = () => {
       return;
     }
 
-    // Remove from board and placed tiles
-    const newBoard = gameState.board.map(boardRow => [...boardRow]);
-    newBoard[row][col] = null;
-    await updateGameBoard(newBoard);
+    // Remove from local board and placed tiles
+    const newLocalBoard = localBoard.map(boardRow => [...boardRow]);
+    newLocalBoard[row][col] = null;
+    setLocalBoard(newLocalBoard);
 
     const newPlacedTiles = placedTiles.filter((_, index) => index !== placedTileIndex);
     setPlacedTiles(newPlacedTiles);
@@ -252,6 +269,9 @@ const Game = () => {
     const score = calculateScore(placedTiles, gameState.board);
     
     if (currentPlayer) {
+      // NOW sync the local board changes to the database
+      await updateGameBoard(localBoard);
+      
       const newScore = currentPlayer.score + score;
       await updatePlayerScore(newScore);
       
@@ -317,14 +337,6 @@ const Game = () => {
         // Remove score from original player
         const newScore = originalPlayer.score - pendingChallenge.score;
         
-        // Update the original player's score by finding them in current players
-        const originalPlayerInCurrentGame = gameState.players.find(p => p.id === pendingChallenge.originalPlayerId);
-        if (originalPlayerInCurrentGame) {
-          // Note: This will update the score for the original player, not the current challenger
-          // We need to update the correct player's score in the database
-          await updatePlayerScore(newScore);
-        }
-        
         // Remove tiles from board
         const newBoard = gameState.board.map(boardRow => [...boardRow]);
         for (const { row, col } of pendingChallenge.placedTiles) {
@@ -332,26 +344,40 @@ const Game = () => {
         }
         await updateGameBoard(newBoard);
         
-        // Return the newly drawn tiles to the tile bag and remove them from player's rack
+        // Return the newly drawn tiles to the tile bag
         if (pendingChallenge.drawnTiles && pendingChallenge.drawnTiles.length > 0) {
           const restoredBag = restoreTilesToBag(pendingChallenge.drawnTiles, gameState.tileBag);
           await updateTileBag(restoredBag);
           
-          // Remove the drawn tiles from the original player's rack
+          // Remove the drawn tiles from the original player's rack and add back the placed tiles
           const updatedPlayerTiles = originalPlayer.tiles.filter(tile => 
             !pendingChallenge.drawnTiles!.some(drawnTile => drawnTile.id === tile.id)
           );
           
-          // Add back the tiles that were placed on the board
-          const tilesToReturn = pendingChallenge.placedTiles.map(({ tile }) => tile);
+          // Add back the tiles that were placed on the board (reset blank tiles)
+          const tilesToReturn = pendingChallenge.placedTiles.map(({ tile }) => {
+            if (tile.isBlank) {
+              return {
+                ...tile,
+                chosenLetter: undefined,
+                letter: '?'
+              };
+            }
+            return tile;
+          });
+          
           const finalPlayerTiles = [...updatedPlayerTiles, ...tilesToReturn];
           
+          // Update the original player's tiles and score
+          // Note: We need to handle this differently since we're updating another player's data
+          // For now, we'll update through the same interface, but this might need refinement
           await updatePlayerTiles(finalPlayerTiles);
+          await updatePlayerScore(newScore);
         }
         
         toast({
           title: "Challenge successful",
-          description: `Invalid words found: ${wordValidation.invalidWords.join(', ')}. You keep your turn, and the original player's tiles are returned.`
+          description: `Invalid words found: ${wordValidation.invalidWords.join(', ')}. The original player's tiles have been returned and score reduced.`
         });
       }
       
@@ -386,19 +412,11 @@ const Game = () => {
     // Store the tiles to recall before clearing the state
     const tilesToRecall = [...placedTiles];
     
-    // Clear placed tiles immediately to prevent issues with real-time updates
+    // Clear placed tiles immediately
     setPlacedTiles([]);
     
-    // Create a new board with all placed tiles removed
-    const newBoard = gameState.board.map(boardRow => [...boardRow]);
-    
-    // Remove all placed tiles from the board
-    for (const { row, col } of tilesToRecall) {
-      newBoard[row][col] = null;
-    }
-    
-    // Update the board once with all tiles removed
-    await updateGameBoard(newBoard);
+    // Reset local board to match server board (remove all locally placed tiles)
+    setLocalBoard(gameState.board.map(row => [...row]));
     
     // Return all tiles to player's rack in one batch
     if (currentPlayer) {
@@ -418,7 +436,7 @@ const Game = () => {
       await updatePlayerTiles(updatedTiles);
     }
     
-    // Refresh game state once at the end
+    // Refresh game state
     await refreshGameState();
     
     toast({
@@ -531,7 +549,7 @@ const Game = () => {
 
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <GameBoard
-                board={gameState.board}
+                board={localBoard}
                 onTilePlacement={handleTilePlacement}
                 onTileDoubleClick={handleTileDoubleClick}
               />
