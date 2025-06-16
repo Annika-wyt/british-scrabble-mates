@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -313,6 +312,9 @@ const Game = () => {
   const challengeWord = async () => {
     if (!pendingChallenge || !currentPlayer) return;
 
+    console.log('Challenge initiated by:', currentPlayer.name);
+    console.log('Original player ID:', pendingChallenge.originalPlayerId);
+
     // NOW we validate the words using the CSW dictionary
     const wordValidation = await validateAllWordsFormed(
       pendingChallenge.placedTiles, 
@@ -336,8 +338,11 @@ const Game = () => {
       const originalPlayer = gameState.players.find(p => p.id === pendingChallenge.originalPlayerId);
       
       if (originalPlayer) {
+        console.log('Penalizing original player:', originalPlayer.name);
+        
         // Remove score from original player
         const newScore = originalPlayer.score - pendingChallenge.score;
+        console.log('Original player score reduced from', originalPlayer.score, 'to', newScore);
         
         // Remove tiles from board
         const newBoard = gameState.board.map(boardRow => [...boardRow]);
@@ -346,8 +351,9 @@ const Game = () => {
         }
         await updateGameBoard(newBoard);
         
-        // Return the newly drawn tiles to the tile bag
+        // Update the original player's score and tiles through direct database calls
         if (pendingChallenge.drawnTiles && pendingChallenge.drawnTiles.length > 0) {
+          // Return the newly drawn tiles to the tile bag
           const restoredBag = restoreTilesToBag(pendingChallenge.drawnTiles, gameState.tileBag);
           await updateTileBag(restoredBag);
           
@@ -370,11 +376,25 @@ const Game = () => {
           
           const finalPlayerTiles = [...updatedPlayerTiles, ...tilesToReturn];
           
-          // Update the original player's tiles and score
-          // Note: We need to handle this differently since we're updating another player's data
-          // For now, we'll update through the same interface, but this might need refinement
-          await updatePlayerTiles(finalPlayerTiles);
-          await updatePlayerScore(newScore);
+          // Update the original player's tiles and score directly via Supabase
+          console.log('Updating original player tiles and score via database');
+          const { error: tilesError } = await supabase
+            .from('game_players')
+            .update({ tiles: finalPlayerTiles as any })
+            .eq('id', originalPlayer.id);
+
+          if (tilesError) {
+            console.error('Error updating original player tiles:', tilesError);
+          }
+
+          const { error: scoreError } = await supabase
+            .from('game_players')
+            .update({ score: newScore })
+            .eq('id', originalPlayer.id);
+
+          if (scoreError) {
+            console.error('Error updating original player score:', scoreError);
+          }
         }
         
         toast({
