@@ -36,8 +36,12 @@ const PlayerRack = ({ tiles, onTileSelect, onTileDrag }: PlayerRackProps) => {
                 "text-gray-900 font-bold"
               )}
             >
-              <span className="text-lg sm:text-xl">{tile.letter}</span>
-              <span className="text-xs">{tile.value}</span>
+              <span className="text-lg sm:text-xl">
+                {tile.isBlank ? (tile.chosenLetter || '?') : tile.letter}
+              </span>
+              <span className="text-xs">
+                {tile.isBlank ? 0 : tile.value}
+              </span>
             </div>
           ))}
           

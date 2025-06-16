@@ -1,8 +1,8 @@
-
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Tile, BoardSquare } from "@/types/game";
 import { Star } from "lucide-react";
+import BlankTileSelector from "./BlankTileSelector";
 
 interface GameBoardProps {
   board: (Tile | null)[][];
@@ -96,6 +96,11 @@ const getSquareLabel = (square: BoardSquare) => {
 
 const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
   const [dragOverSquare, setDragOverSquare] = useState<{row: number, col: number} | null>(null);
+  const [pendingBlankTile, setPendingBlankTile] = useState<{
+    row: number;
+    col: number;
+    tile: Tile;
+  } | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -139,11 +144,34 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
       if (tileData) {
         const tile: Tile = JSON.parse(tileData);
         console.log('Parsed tile for placement:', tile);
-        onTilePlacement(row, col, tile);
+        
+        // If it's a blank tile, show the letter selector
+        if (tile.isBlank && !tile.chosenLetter) {
+          setPendingBlankTile({ row, col, tile });
+        } else {
+          onTilePlacement(row, col, tile);
+        }
       }
     } catch (error) {
       console.error('Error handling tile drop:', error);
     }
+  };
+
+  const handleBlankTileLetterSelect = (letter: string) => {
+    if (pendingBlankTile) {
+      const updatedTile: Tile = {
+        ...pendingBlankTile.tile,
+        chosenLetter: letter,
+        letter: letter // Update the display letter
+      };
+      
+      onTilePlacement(pendingBlankTile.row, pendingBlankTile.col, updatedTile);
+      setPendingBlankTile(null);
+    }
+  };
+
+  const handleBlankTileCancel = () => {
+    setPendingBlankTile(null);
   };
 
   return (
@@ -172,8 +200,12 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
               >
                 {tile ? (
                   <div className="font-bold flex flex-col items-center leading-none">
-                    <span className="text-lg">{tile.letter}</span>
-                    <span className="text-xs">{tile.value}</span>
+                    <span className="text-lg">
+                      {tile.isBlank && tile.chosenLetter ? tile.chosenLetter : tile.letter}
+                    </span>
+                    <span className="text-xs">
+                      {tile.isBlank ? 0 : tile.value}
+                    </span>
                   </div>
                 ) : (
                   square.type === 'center' ? (
@@ -189,6 +221,12 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
           })
         )}
       </div>
+      
+      <BlankTileSelector
+        isOpen={!!pendingBlankTile}
+        onClose={handleBlankTileCancel}
+        onLetterSelect={handleBlankTileLetterSelect}
+      />
     </div>
   );
 };

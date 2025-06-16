@@ -1,9 +1,9 @@
-
 export interface Tile {
   letter: string;
   value: number;
   id: string;
   isBlank?: boolean;
+  chosenLetter?: string; // For blank tiles that have been assigned a letter
 }
 
 export interface Player {
