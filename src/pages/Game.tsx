@@ -14,7 +14,7 @@ import { ChatMessage, Tile } from "@/types/game";
 import { drawNewTiles, removePlayerTiles } from "@/utils/tileManagementUtils";
 import GameActions from "@/components/GameActions";
 import { calculateScore } from "@/utils/scoreUtils";
-import { validateAllWordsFormed } from "@/utils/dictionaryUtils";
+import { validateAllWordsFormed, validateTilePlacement } from "@/utils/dictionaryUtils";
 
 const Game = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
