@@ -7,7 +7,7 @@ import GameHeader from "@/components/GameHeader";
 import GameSidebar from "@/components/GameSidebar";
 import { useToast } from "@/hooks/use-toast";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
-import { Tile } from "@/types/game";
+import { Tile, PendingChallenge } from "@/types/game";
 import { validateWord } from "@/utils/dictionaryUtils";
 import { calculateScore } from "@/utils/scoreUtils";
 import { validateWordPlacement } from "@/utils/wordValidationUtils";
@@ -224,7 +224,7 @@ const Game = () => {
           
           // Remove the drawn tiles from the original player's rack
           const updatedPlayerTiles = originalPlayer.tiles.filter(tile => 
-            !pendingChallenge.drawnTiles.some(drawnTile => drawnTile.id === tile.id)
+            !pendingChallenge.drawnTiles!.some(drawnTile => drawnTile.id === tile.id)
           );
           
           // Add back the tiles that were placed on the board

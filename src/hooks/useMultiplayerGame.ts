@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { GameState, Player, Tile } from "@/types/game";
+import { GameState, Player, Tile, PendingChallenge } from "@/types/game";
 import { generateInitialTiles, drawTiles } from "@/utils/tileUtils";
 import { Database } from "@/integrations/supabase/types";
 
@@ -26,12 +26,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [pendingChallenge, setPendingChallenge] = useState<{
-    challengerId: string;
-    originalPlayerId: string;
-    placedTiles: {row: number, col: number, tile: Tile}[];
-    score: number;
-  } | null>(null);
+  const [pendingChallenge, setPendingChallenge] = useState<PendingChallenge | null>(null);
   const { toast } = useToast();
   
   // Use refs to avoid dependency issues in useEffect
@@ -483,6 +478,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     originalPlayerId: string;
     placedTiles: {row: number, col: number, tile: Tile}[];
     score: number;
+    drawnTiles?: Tile[];
   }) => {
     if (!gameIdRef.current) return;
 

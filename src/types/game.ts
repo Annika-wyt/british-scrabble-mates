@@ -36,3 +36,11 @@ export interface BoardSquare {
   type: 'normal' | 'double-letter' | 'triple-letter' | 'double-word' | 'triple-word' | 'center';
   multiplier?: number;
 }
+
+export interface PendingChallenge {
+  challengerId?: string;
+  originalPlayerId: string;
+  placedTiles: { row: number; col: number; tile: Tile; }[];
+  score: number;
+  drawnTiles?: Tile[];
+}
