@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -367,6 +366,28 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     }
   }, []);
 
+  const updateTileBag = useCallback(async (newTileBag: Tile[]) => {
+    if (!gameIdRef.current) return;
+
+    try {
+      console.log('Updating tile bag in database');
+      const { error } = await supabase
+        .from('games')
+        .update({ 
+          tile_bag: newTileBag as any,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', gameIdRef.current);
+
+      if (error) {
+        console.error('Error updating tile bag:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error updating tile bag:', error);
+    }
+  }, []);
+
   const nextTurn = useCallback(async () => {
     if (!gameIdRef.current || !gameState.players.length) return;
 
@@ -511,6 +532,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
+    updateTileBag,
     nextTurn,
     refreshGameState,
     validateRoomCode,

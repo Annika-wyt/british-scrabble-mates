@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -9,6 +10,8 @@ import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
 import { Tile } from "@/types/game";
 import { validateWord } from "@/utils/dictionaryUtils";
 import { calculateScore } from "@/utils/scoreUtils";
+import { validateWordPlacement } from "@/utils/wordValidationUtils";
+import { drawNewTiles, restoreTilesToBag } from "@/utils/tileManagementUtils";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, LogOut, Shuffle } from "lucide-react";
 
@@ -27,6 +30,7 @@ const Game = () => {
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
+    updateTileBag,
     nextTurn,
     refreshGameState,
     setPendingChallengeInGame,
@@ -124,6 +128,17 @@ const Game = () => {
       return;
     }
 
+    // Validate word placement (connection and alignment)
+    const validationResult = validateWordPlacement(placedTiles, gameState.board);
+    if (!validationResult.isValid) {
+      toast({
+        title: "Invalid word placement",
+        description: validationResult.reason,
+        variant: "destructive"
+      });
+      return;
+    }
+
     console.log('Submitting word with tiles:', placedTiles);
 
     // Calculate score for the placed tiles
@@ -133,11 +148,23 @@ const Game = () => {
       const newScore = currentPlayer.score + score;
       await updatePlayerScore(newScore);
       
+      // Draw new tiles to replace the ones used
+      const { newTiles, remainingBag } = drawNewTiles(
+        gameState.tileBag, 
+        currentPlayer.tiles, 
+        placedTiles.length
+      );
+      
+      // Update player tiles and tile bag
+      await updatePlayerTiles(newTiles);
+      await updateTileBag(remainingBag);
+      
       // Set up pending challenge state in database for all players
       await setPendingChallengeInGame({
         originalPlayerId: currentPlayer.id,
         placedTiles: [...placedTiles],
-        score
+        score,
+        drawnTiles: newTiles.slice(-placedTiles.length) // Store the newly drawn tiles
       });
       
       // Clear placed tiles and move to next player
@@ -190,12 +217,26 @@ const Game = () => {
         }
         await updateGameBoard(newBoard);
         
-        // Return tiles to tile bag (simplified - in real game would draw from bag)
-        console.log('Returning challenged tiles to tile bag');
+        // Return the newly drawn tiles to the tile bag and remove them from player's rack
+        if (pendingChallenge.drawnTiles && pendingChallenge.drawnTiles.length > 0) {
+          const restoredBag = restoreTilesToBag(pendingChallenge.drawnTiles, gameState.tileBag);
+          await updateTileBag(restoredBag);
+          
+          // Remove the drawn tiles from the original player's rack
+          const updatedPlayerTiles = originalPlayer.tiles.filter(tile => 
+            !pendingChallenge.drawnTiles.some(drawnTile => drawnTile.id === tile.id)
+          );
+          
+          // Add back the tiles that were placed on the board
+          const tilesToReturn = pendingChallenge.placedTiles.map(({ tile }) => tile);
+          const finalPlayerTiles = [...updatedPlayerTiles, ...tilesToReturn];
+          
+          await updatePlayerTiles(finalPlayerTiles);
+        }
         
         toast({
           title: "Challenge successful",
-          description: `The word "${word}" is invalid. The original player loses their turn and tiles are returned.`
+          description: `The word "${word}" is invalid. The original player loses their turn and new tiles are returned.`
         });
       }
       
