@@ -23,7 +23,7 @@ const PlayerRack = ({ tiles, onTileSelect, onTileDrag }: PlayerRackProps) => {
         <div className="flex gap-2">
           {tiles.map((tile, index) => (
             <div
-              key={tile.id}
+              key={`${tile.id}-${index}`}
               draggable
               onDragStart={(e) => handleDragStart(e, tile)}
               onClick={() => onTileSelect(tile)}
@@ -42,7 +42,7 @@ const PlayerRack = ({ tiles, onTileSelect, onTileDrag }: PlayerRackProps) => {
           ))}
           
           {/* Fill empty slots */}
-          {Array.from({ length: 7 - tiles.length }, (_, index) => (
+          {Array.from({ length: Math.max(0, 7 - tiles.length) }, (_, index) => (
             <div
               key={`empty-${index}`}
               className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-50 border-2 border-gray-200 rounded-lg opacity-50"

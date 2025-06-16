@@ -60,22 +60,28 @@ const Game = () => {
       return;
     }
 
-    if (gameState.board[row][col] !== null) return;
+    if (gameState.board[row][col] !== null) {
+      console.log('Square already occupied, cannot place tile');
+      return;
+    }
 
-    console.log('Placing tile:', { row, col, tile: tile.letter });
+    console.log('Placing tile:', { row, col, tile: tile.letter, tileId: tile.id });
 
     // Add to placed tiles for tracking
     const newPlacedTiles = [...placedTiles, { row, col, tile }];
     setPlacedTiles(newPlacedTiles);
 
-    // Update board first
+    // Update board immediately for local state
     const newBoard = gameState.board.map(boardRow => [...boardRow]);
     newBoard[row][col] = tile;
+    
+    // Update board in database
     await updateGameBoard(newBoard);
 
     // Remove tile from player's rack
     if (currentPlayer) {
       const updatedTiles = currentPlayer.tiles.filter(t => t.id !== tile.id);
+      console.log('Updated player tiles:', updatedTiles.length, 'tiles remaining');
       await updatePlayerTiles(updatedTiles);
     }
   };
@@ -83,7 +89,7 @@ const Game = () => {
   const handleTileReturn = async (tile: Tile) => {
     if (!currentPlayer) return;
 
-    console.log('Returning tile to rack:', tile.letter);
+    console.log('Returning tile to rack:', { letter: tile.letter, id: tile.id });
     const updatedTiles = [...currentPlayer.tiles, tile];
     await updatePlayerTiles(updatedTiles);
   };

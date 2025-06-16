@@ -104,6 +104,7 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
 
   const handleDragEnter = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault();
+    // Only show drag over effect if the square is empty
     if (board[row][col] === null) {
       setDragOverSquare({ row, col });
     }
@@ -111,7 +112,12 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+    // Only clear drag over state if we're actually leaving the element
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
       setDragOverSquare(null);
     }
   };
@@ -120,10 +126,19 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
     e.preventDefault();
     setDragOverSquare(null);
     
+    // Check if square is already occupied
+    if (board[row][col] !== null) {
+      console.log('Square already occupied');
+      return;
+    }
+    
     try {
       const tileData = e.dataTransfer.getData('tile');
-      if (tileData && board[row][col] === null) {
+      console.log('Drop event - tile data:', tileData);
+      
+      if (tileData) {
         const tile: Tile = JSON.parse(tileData);
+        console.log('Parsed tile for placement:', tile);
         onTilePlacement(row, col, tile);
       }
     } catch (error) {
@@ -138,15 +153,16 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
           row.map((tile, colIndex) => {
             const square = getBoardSquare(rowIndex, colIndex);
             const isDragOver = dragOverSquare?.row === rowIndex && dragOverSquare?.col === colIndex;
+            const isEmpty = tile === null;
             
             return (
               <div
-                key={`${rowIndex}-${colIndex}`}
+                key={`square-${rowIndex}-${colIndex}`}
                 className={cn(
                   "w-8 h-8 sm:w-10 sm:h-10 border flex items-center justify-center text-xs sm:text-sm relative transition-all duration-200",
                   getSquareClasses(square),
-                  tile ? 'bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 text-gray-900' : '',
-                  isDragOver && !tile ? 'bg-green-200 border-green-400 scale-105' : '',
+                  !isEmpty ? 'bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 text-gray-900' : '',
+                  isDragOver && isEmpty ? 'bg-green-200 border-green-400 scale-105 ring-2 ring-green-300' : '',
                   square.type === 'normal' ? 'border-gray-300' : 'border-white/30'
                 )}
                 onDragOver={handleDragOver}
