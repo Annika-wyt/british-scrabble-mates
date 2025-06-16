@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -467,6 +468,15 @@ const Game = () => {
     }
   };
 
+  // Debug logging to understand the state
+  console.log('Game state debug:', {
+    game: game,
+    gameStarted: game?.game_started,
+    currentPlayer: currentPlayer,
+    isReady: isReady,
+    placedTilesCount: placedTilesThisTurn.length
+  });
+
   // Main game interface
   return (
     <div className="min-h-screen bg-gray-100">
@@ -483,8 +493,8 @@ const Game = () => {
               onTileDoubleClick={handleTileDoubleClick}
             />
             
-            {/* Player Rack */}
-            {currentPlayer && game?.game_started && (
+            {/* Player Rack - Show when game started and player exists */}
+            {game?.game_started && currentPlayer && (
               <div className="mt-6">
                 <PlayerRack
                   tiles={currentPlayer.tiles || []}
@@ -493,12 +503,21 @@ const Game = () => {
               </div>
             )}
 
-            {/* Game Actions */}
-            {game?.game_started && currentPlayer && (
+            {/* Debug info - temporarily show game state */}
+            <div className="mt-4 p-4 bg-yellow-100 border border-yellow-300 rounded">
+              <h4 className="font-bold">Debug Info:</h4>
+              <p>Game Started: {game?.game_started ? 'Yes' : 'No'}</p>
+              <p>Current Player: {currentPlayer ? 'Yes' : 'No'}</p>
+              <p>Is Ready: {isReady ? 'Yes' : 'No'}</p>
+              <p>Placed Tiles: {placedTilesThisTurn.length}</p>
+            </div>
+
+            {/* Game Actions - Always show when game started */}
+            {game?.game_started && (
               <GameActions
                 isCurrentTurn={isCurrentTurn}
                 canChallenge={false} // TODO: Implement proper challenge detection
-                playerTiles={currentPlayer.tiles || []}
+                playerTiles={currentPlayer?.tiles || []}
                 onShuffleTiles={handleShuffleTiles}
                 onSubmitWord={handleSubmitWord}
                 onRetrieveTiles={handleRetrieveTiles}
