@@ -20,16 +20,21 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   });
   const queryClient = useQueryClient();
 
-  // Set player context for RLS
+  // Set player context for RLS - only if we have a player name
   useEffect(() => {
     const setPlayerContext = async () => {
       if (playerName) {
-        const { error } = await supabase.rpc('set_player_context', { 
-          player_name: playerName 
-        });
-        if (error) {
-          console.error('Error setting player context:', error);
-          setConnectionError('Failed to set player context');
+        try {
+          const { error } = await supabase.rpc('set_player_context', { 
+            player_name: playerName 
+          });
+          if (error) {
+            console.error('Error setting player context:', error);
+          } else {
+            console.log('Player context set successfully for:', playerName);
+          }
+        } catch (error) {
+          console.error('Failed to set player context:', error);
         }
       }
     };
@@ -37,16 +42,27 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   }, [playerName]);
 
   // Fetch game data
-  const { data: game, isLoading: gameLoading } = useQuery({
+  const { data: game, isLoading: gameLoading, error: gameError } = useQuery({
     queryKey: ['game', roomCode],
     queryFn: async () => {
+      console.log('Fetching game data for room:', roomCode);
       const { data, error } = await supabase
         .from('games')
         .select('*')
         .eq('room_code', roomCode)
-        .single();
+        .maybeSingle();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching game:', error);
+        throw error;
+      }
+      
+      if (!data) {
+        console.log('No game found for room code:', roomCode);
+        return null;
+      }
+      
+      console.log('Game data fetched successfully:', data);
       
       // Convert the database data to our Game type with proper type casting
       return {
@@ -57,21 +73,31 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       } as Game;
     },
     enabled: !!roomCode,
+    retry: 1,
   });
 
   // Fetch players data
   const { data: players, isLoading: playersLoading } = useQuery({
     queryKey: ['players', game?.id],
     queryFn: async () => {
-      if (!game?.id) return [];
+      if (!game?.id) {
+        console.log('No game ID available for fetching players');
+        return [];
+      }
       
+      console.log('Fetching players for game:', game.id);
       const { data, error } = await supabase
         .from('game_players')
         .select('*')
         .eq('game_id', game.id)
         .order('player_order');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching players:', error);
+        throw error;
+      }
+      
+      console.log('Players fetched successfully:', data);
       
       // Convert database data to GamePlayer type with proper type casting and computed properties
       return data.map(player => ({
@@ -83,7 +109,16 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       })) as GamePlayer[];
     },
     enabled: !!game?.id,
+    retry: 1,
   });
+
+  // Handle errors
+  useEffect(() => {
+    if (gameError) {
+      console.error('Game query error:', gameError);
+      setConnectionError('Failed to load game data');
+    }
+  }, [gameError]);
 
   // Update gameState when data changes
   useEffect(() => {
@@ -110,14 +145,20 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
 
   // Join game function
   const joinGame = useCallback(async () => {
-    if (!game || !playerName) return;
+    if (!game || !playerName) {
+      console.log('Cannot join game - missing game or player name');
+      return;
+    }
 
     try {
+      console.log('Attempting to join game:', game.id, 'as player:', playerName);
+      
       // Check if player already exists
       const existingPlayer = players?.find(p => p.player_name === playerName);
       
       if (!existingPlayer) {
         const playerOrder = players?.length || 0;
+        console.log('Creating new player with order:', playerOrder);
         
         const { error } = await supabase
           .from('game_players')
@@ -130,20 +171,31 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
             is_connected: true,
           });
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error creating player:', error);
+          throw error;
+        }
         
+        console.log('Player created successfully');
         toast.success(`Joined game ${roomCode}`);
       } else {
+        console.log('Player already exists, updating connection status');
         // Update connection status
         const { error } = await supabase
           .from('game_players')
           .update({ is_connected: true })
           .eq('id', existingPlayer.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Error updating player connection:', error);
+          throw error;
+        }
+        
+        console.log('Player connection updated');
       }
 
       setIsConnected(true);
+      setConnectionError(null);
       queryClient.invalidateQueries({ queryKey: ['players', game.id] });
     } catch (error) {
       console.error('Error joining game:', error);

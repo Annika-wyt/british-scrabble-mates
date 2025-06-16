@@ -1,43 +1,35 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import GameBoard from "@/components/GameBoard";
-import PlayerRack from "@/components/PlayerRack";
-import GameHeader from "@/components/GameHeader";
-import GameSidebar from "@/components/GameSidebar";
-import BlankTileSelector from "@/components/BlankTileSelector";
-import { useToast } from "@/hooks/use-toast";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
 import { supabase } from "@/integrations/supabase/client";
-import { Tile, PendingChallenge } from "@/types/game";
-import { validateAllWordsFormed } from "@/utils/dictionaryUtils";
-import { calculateScore } from "@/utils/scoreUtils";
-import { validateWordPlacement } from "@/utils/wordValidationUtils";
-import { drawNewTiles, restoreTilesToBag } from "@/utils/tileManagementUtils";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, LogOut, Shuffle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Users, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import GameBoard from "@/components/GameBoard";
+import GameSidebar from "@/components/GameSidebar";
+import GameHeader from "@/components/GameHeader";
 
 const Game = () => {
-  const { roomCode } = useParams();
+  const { roomCode } = useParams<{ roomCode: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
-
-  const [playerName, setPlayerName] = useState<string>("");
-  const [placedTiles, setPlacedTiles] = useState<{row: number, col: number, tile: Tile}[]>([]);
-  const [localBoard, setLocalBoard] = useState<(Tile | null)[][]>(Array(15).fill(null).map(() => Array(15).fill(null)));
-  const [blankTileSelector, setBlankTileSelector] = useState<{
-    isOpen: boolean;
-    tileId: string | null;
-    position: { row: number; col: number } | null;
-  }>({
-    isOpen: false,
-    tileId: null,
-    position: null
-  });
+  const [playerName, setPlayerName] = useState("");
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [roomExists, setRoomExists] = useState<boolean | null>(null);
 
   const {
-    gameState,
+    game,
+    players,
     currentPlayer,
-    pendingChallenge,
+    gameState,
+    isLoading,
+    isConnected,
+    isCurrentTurn,
+    isReady,
+    connectionError,
+    joinGame,
+    startGame,
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
@@ -46,618 +38,293 @@ const Game = () => {
     refreshGameState,
     setPendingChallengeInGame,
     clearPendingChallengeInGame,
-    isReady,
-    isLoading,
-    connectionError
   } = useMultiplayerGame(roomCode || "", playerName);
 
-  // Helper function to set player context for direct database operations
-  const setPlayerContext = async () => {
-    if (!playerName) return;
-    
-    try {
-      const { error } = await supabase.rpc('set_player_context', {
-        player_name: playerName
-      });
-      
-      if (error) {
-        console.error('Error setting player context:', error);
-      }
-    } catch (error) {
-      console.error('Failed to set player context:', error);
-    }
-  };
-
-  // Update local board when game state changes, but preserve local changes for current player
-  useEffect(() => {
-    if (!isMyTurn()) {
-      // If it's not our turn, sync with the server board completely
-      setLocalBoard(gameState.board.map(row => [...row]));
-    } else {
-      // If it's our turn, only update squares that aren't locally modified
-      const newLocalBoard = gameState.board.map(row => [...row]);
-      
-      // Apply our placed tiles to the local board
-      for (const { row, col, tile } of placedTiles) {
-        newLocalBoard[row][col] = tile;
-      }
-      
-      setLocalBoard(newLocalBoard);
-    }
-  }, [gameState.board, placedTiles]);
-
+  // Get player name from localStorage on mount
   useEffect(() => {
     const storedPlayerName = localStorage.getItem("playerName");
-    const storedRoomCode = localStorage.getItem("roomCode");
-
-    if (!storedPlayerName || !storedRoomCode || storedRoomCode !== roomCode) {
-      navigate("/");
-      return;
-    }
-
-    setPlayerName(storedPlayerName);
-  }, [roomCode, navigate]);
-
-  // Check if it's current player's turn
-  const isMyTurn = () => {
-    if (!currentPlayer || !gameState.players.length) return false;
-    const currentTurnPlayer = gameState.players[gameState.currentPlayerIndex];
-    return currentTurnPlayer?.id === currentPlayer.id;
-  };
-
-  const handleTilePlacement = async (row: number, col: number, tile: Tile) => {
-    if (!isMyTurn()) {
-      toast({
-        title: "Not your turn",
-        description: "Please wait for your turn to place tiles.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (gameState.board[row][col] !== null) {
-      console.log('Square already occupied, cannot place tile');
-      return;
-    }
-
-    // Check if this is a blank tile
-    if (tile.isBlank && !tile.chosenLetter) {
-      setBlankTileSelector({
-        isOpen: true,
-        tileId: tile.id,
-        position: { row, col }
-      });
-      return;
-    }
-
-    console.log('Placing tile locally:', { row, col, tile: tile.letter, tileId: tile.id });
-
-    // Add to placed tiles for tracking
-    const newPlacedTiles = [...placedTiles, { row, col, tile }];
-    setPlacedTiles(newPlacedTiles);
-
-    // Update local board only (not synced to database yet)
-    const newLocalBoard = localBoard.map(boardRow => [...boardRow]);
-    newLocalBoard[row][col] = tile;
-    setLocalBoard(newLocalBoard);
-
-    // Remove tile from player's rack locally
-    if (currentPlayer) {
-      const updatedTiles = currentPlayer.tiles.filter(t => t.id !== tile.id);
-      console.log('Updated player tiles locally:', updatedTiles.length, 'tiles remaining');
-      await updatePlayerTiles(updatedTiles);
-    }
-
-    // Refresh game state to ensure UI is updated
-    await refreshGameState();
-  };
-
-  const handleBlankTileLetterSelect = async (letter: string) => {
-    if (!blankTileSelector.tileId || !blankTileSelector.position || !currentPlayer) {
-      setBlankTileSelector({ isOpen: false, tileId: null, position: null });
-      return;
-    }
-
-    const { row, col } = blankTileSelector.position;
-    
-    // Find the tile in player's rack
-    const tileIndex = currentPlayer.tiles.findIndex(t => t.id === blankTileSelector.tileId);
-    if (tileIndex === -1) {
-      setBlankTileSelector({ isOpen: false, tileId: null, position: null });
-      return;
-    }
-
-    // Create updated tile with chosen letter
-    const updatedTile = {
-      ...currentPlayer.tiles[tileIndex],
-      chosenLetter: letter,
-      letter: letter // Display the chosen letter
-    };
-
-    // Place the tile locally
-    const newPlacedTiles = [...placedTiles, { row, col, tile: updatedTile }];
-    setPlacedTiles(newPlacedTiles);
-
-    // Update local board
-    const newLocalBoard = localBoard.map(boardRow => [...boardRow]);
-    newLocalBoard[row][col] = updatedTile;
-    setLocalBoard(newLocalBoard);
-
-    // Remove tile from player's rack
-    const updatedPlayerTiles = currentPlayer.tiles.filter(t => t.id !== blankTileSelector.tileId);
-    await updatePlayerTiles(updatedPlayerTiles);
-
-    // Close selector and refresh
-    setBlankTileSelector({ isOpen: false, tileId: null, position: null });
-    await refreshGameState();
-  };
-
-  // Allow players to redefine blank tiles before submitting (improved logic)
-  const handleTileDoubleClick = async (row: number, col: number) => {
-    if (!isMyTurn()) return;
-
-    // Check if this tile was placed in current turn
-    const placedTileIndex = placedTiles.findIndex(pt => pt.row === row && pt.col === col);
-    if (placedTileIndex === -1) return; // Not a tile placed in current turn
-
-    const placedTile = placedTiles[placedTileIndex];
-    
-    // Only allow redefinition of blank tiles
-    if (!placedTile.tile.isBlank) {
-      toast({
-        title: "Cannot redefine",
-        description: "You can only redefine blank tiles.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Remove from local board and placed tiles
-    const newLocalBoard = localBoard.map(boardRow => [...boardRow]);
-    newLocalBoard[row][col] = null;
-    setLocalBoard(newLocalBoard);
-
-    const newPlacedTiles = placedTiles.filter((_, index) => index !== placedTileIndex);
-    setPlacedTiles(newPlacedTiles);
-
-    // Reset the tile and return to rack
-    const originalTile = {
-      ...placedTile.tile,
-      chosenLetter: undefined,
-      letter: '?'
-    };
-
-    if (currentPlayer) {
-      const updatedTiles = [...currentPlayer.tiles, originalTile];
-      await updatePlayerTiles(updatedTiles);
-    }
-
-    await refreshGameState();
-    
-    toast({
-      title: "Blank tile recalled",
-      description: "You can now redefine this blank tile by placing it again."
-    });
-  };
-
-  const handleTileReturn = async (tile: Tile) => {
-    if (!currentPlayer) return;
-
-    console.log('Returning tile to rack:', { letter: tile.letter, id: tile.id });
-    const updatedTiles = [...currentPlayer.tiles, tile];
-    await updatePlayerTiles(updatedTiles);
-    
-    // Refresh game state to ensure UI is updated
-    await refreshGameState();
-  };
-
-  const submitWord = async () => {
-    if (!isMyTurn()) {
-      toast({
-        title: "Not your turn",
-        description: "Please wait for your turn to submit a word.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (placedTiles.length === 0) {
-      toast({
-        title: "No tiles placed",
-        description: "Please place some tiles on the board first.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Validate word placement (connection and alignment) - but NOT dictionary validity
-    const validationResult = validateWordPlacement(placedTiles, gameState.board);
-    if (!validationResult.isValid) {
-      toast({
-        title: "Invalid word placement",
-        description: validationResult.reason,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    console.log('Submitting word with tiles:', placedTiles);
-
-    // Calculate score for the placed tiles (no dictionary validation here)
-    const score = calculateScore(placedTiles, gameState.board);
-    
-    if (currentPlayer) {
-      // NOW sync the local board changes to the database
-      await updateGameBoard(localBoard);
-      
-      const newScore = currentPlayer.score + score;
-      await updatePlayerScore(newScore);
-      
-      // Draw new tiles to replace the ones used
-      const { newTiles, remainingBag } = drawNewTiles(
-        gameState.tileBag, 
-        currentPlayer.tiles, 
-        placedTiles.length
-      );
-      
-      // Update player tiles and tile bag
-      await updatePlayerTiles(newTiles);
-      await updateTileBag(remainingBag);
-      
-      // Set up pending challenge state in database for all players
-      await setPendingChallengeInGame({
-        originalPlayerId: currentPlayer.id,
-        placedTiles: [...placedTiles],
-        score,
-        drawnTiles: newTiles.slice(-placedTiles.length) // Store the newly drawn tiles
-      });
-      
-      // Clear placed tiles and move to next player
-      setPlacedTiles([]);
-      await nextTurn();
-      
-      // Refresh game state to ensure board updates for all players
-      await refreshGameState();
-      
-      toast({
-        title: "Word submitted!",
-        description: `You scored ${score} points! Other players can now challenge this word.`
-      });
-    }
-  };
-
-  const challengeWord = async () => {
-    if (!pendingChallenge || !currentPlayer) return;
-
-    console.log('Challenge initiated by:', currentPlayer.name);
-    console.log('Original player ID:', pendingChallenge.originalPlayerId);
-
-    // NOW we validate the words using the CSW dictionary
-    const wordValidation = await validateAllWordsFormed(
-      pendingChallenge.placedTiles, 
-      gameState.board
-    );
-    
-    console.log('Challenge result - Invalid words:', wordValidation.invalidWords);
-    
-    if (wordValidation.isValid) {
-      // Valid words - challenger loses their turn, move to next player
-      await clearPendingChallengeInGame();
-      await nextTurn(); // Challenger loses turn, move to next player
-      
-      toast({
-        title: "Challenge failed",
-        description: `All words formed are valid in CSW dictionary. You lose your turn.`,
-        variant: "destructive"
-      });
+    if (storedPlayerName) {
+      setPlayerName(storedPlayerName);
     } else {
-      // Invalid word - challenger keeps their turn, original player loses score and tiles
-      const originalPlayer = gameState.players.find(p => p.id === pendingChallenge.originalPlayerId);
-      
-      if (originalPlayer) {
-        console.log('Penalizing original player:', originalPlayer.name);
-        
-        // Remove score from original player
-        const newScore = originalPlayer.score - pendingChallenge.score;
-        console.log('Original player score reduced from', originalPlayer.score, 'to', newScore);
-        
-        // Remove tiles from board
-        const newBoard = gameState.board.map(boardRow => [...boardRow]);
-        for (const { row, col } of pendingChallenge.placedTiles) {
-          newBoard[row][col] = null;
-        }
-        await updateGameBoard(newBoard);
-        
-        // Update the original player's score and tiles through direct database calls
-        if (pendingChallenge.drawnTiles && pendingChallenge.drawnTiles.length > 0) {
-          // Return the newly drawn tiles to the tile bag
-          const restoredBag = restoreTilesToBag(pendingChallenge.drawnTiles, gameState.tileBag);
-          await updateTileBag(restoredBag);
-          
-          // Remove the drawn tiles from the original player's rack and add back the placed tiles
-          const updatedPlayerTiles = originalPlayer.tiles.filter(tile => 
-            !pendingChallenge.drawnTiles!.some(drawnTile => drawnTile.id === tile.id)
-          );
-          
-          // Add back the tiles that were placed on the board (reset blank tiles)
-          const tilesToReturn = pendingChallenge.placedTiles.map(({ tile }) => {
-            if (tile.isBlank) {
-              return {
-                ...tile,
-                chosenLetter: undefined,
-                letter: '?'
-              };
-            }
-            return tile;
-          });
-          
-          const finalPlayerTiles = [...updatedPlayerTiles, ...tilesToReturn];
-          
-          // Set player context and update the original player's tiles and score directly via Supabase
-          await setPlayerContext();
-          
-          console.log('Updating original player tiles and score via database');
-          const { error: tilesError } = await supabase
-            .from('game_players')
-            .update({ tiles: finalPlayerTiles as any })
-            .eq('id', originalPlayer.id);
+      navigate("/");
+    }
+  }, [navigate]);
 
-          if (tilesError) {
-            console.error('Error updating original player tiles:', tilesError);
+  // Check if room exists and create if necessary
+  useEffect(() => {
+    const checkOrCreateRoom = async () => {
+      if (!roomCode || !playerName) return;
+
+      try {
+        console.log('Checking if room exists:', roomCode);
+        
+        // First, try to find existing room
+        const { data: existingGame, error: selectError } = await supabase
+          .from('games')
+          .select('id, room_code, game_started')
+          .eq('room_code', roomCode)
+          .maybeSingle();
+
+        if (selectError) {
+          console.error('Error checking for existing room:', selectError);
+          toast.error('Failed to check room status');
+          return;
+        }
+
+        if (existingGame) {
+          console.log('Room found:', existingGame);
+          setRoomExists(true);
+        } else {
+          console.log('Room not found, creating new room:', roomCode);
+          setIsCreatingRoom(true);
+          
+          // Create new game room
+          const { data: newGame, error: insertError } = await supabase
+            .from('games')
+            .insert({
+              room_code: roomCode,
+              board: Array(15).fill(null).map(() => Array(15).fill(null)),
+              current_player_index: 0,
+              tile_bag: [],
+              game_started: false,
+              game_over: false,
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error('Error creating room:', insertError);
+            toast.error('Failed to create room');
+            setIsCreatingRoom(false);
+            return;
           }
 
-          const { error: scoreError } = await supabase
-            .from('game_players')
-            .update({ score: newScore })
-            .eq('id', originalPlayer.id);
-
-          if (scoreError) {
-            console.error('Error updating original player score:', scoreError);
-          }
+          console.log('Room created successfully:', newGame);
+          setRoomExists(true);
+          setIsCreatingRoom(false);
+          toast.success(`Room ${roomCode} created successfully!`);
         }
-        
-        toast({
-          title: "Challenge successful",
-          description: `Invalid words found: ${wordValidation.invalidWords.join(', ')}. The original player's tiles have been returned and score reduced.`
-        });
+      } catch (error) {
+        console.error('Unexpected error:', error);
+        toast.error('An unexpected error occurred');
+        setIsCreatingRoom(false);
       }
-      
-      await clearPendingChallengeInGame();
-      // Challenger keeps their turn - no nextTurn() call
+    };
+
+    checkOrCreateRoom();
+  }, [roomCode, playerName]);
+
+  // Auto-join game when room is ready
+  useEffect(() => {
+    if (roomExists && playerName && !isConnected && !isLoading) {
+      console.log('Auto-joining game...');
+      joinGame();
     }
-    
-    await refreshGameState();
-  };
+  }, [roomExists, playerName, isConnected, isLoading, joinGame]);
 
-  const recallTiles = async () => {
-    if (!isMyTurn()) {
-      toast({
-        title: "Not your turn",
-        description: "Please wait for your turn to recall tiles.",
-        variant: "destructive"
-      });
-      return;
-    }
+  if (!roomCode) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="text-red-600">Invalid Room</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 mb-4">No room code provided.</p>
+            <Button onClick={() => navigate("/")} className="w-full">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-    if (placedTiles.length === 0) {
-      toast({
-        title: "No tiles to recall",
-        description: "You haven't placed any tiles yet.",
-        variant: "destructive"
-      });
-      return;
-    }
+  if (!playerName) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="text-red-600">No Player Name</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 mb-4">Please go back and enter your name.</p>
+            <Button onClick={() => navigate("/")} className="w-full">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-    console.log('Recalling tiles:', placedTiles);
-    
-    // Store the tiles to recall before clearing the state
-    const tilesToRecall = [...placedTiles];
-    
-    // Clear placed tiles immediately
-    setPlacedTiles([]);
-    
-    // Reset local board to match server board (remove all locally placed tiles)
-    setLocalBoard(gameState.board.map(row => [...row]));
-    
-    // Return all tiles to player's rack in one batch
-    if (currentPlayer) {
-      const tilesToReturn = tilesToRecall.map(({ tile }) => {
-        // Reset blank tiles to their original state when recalling
-        if (tile.isBlank) {
-          return {
-            ...tile,
-            chosenLetter: undefined,
-            letter: '?'
-          };
-        }
-        return tile;
-      });
-      const updatedTiles = [...currentPlayer.tiles, ...tilesToReturn];
-      console.log('Returning tiles to rack:', tilesToReturn.map(t => t.letter).join(', '));
-      await updatePlayerTiles(updatedTiles);
-    }
-    
-    // Refresh game state
-    await refreshGameState();
-    
-    toast({
-      title: "Tiles recalled",
-      description: `All ${tilesToRecall.length} placed tiles have been returned to your rack.`
-    });
-  };
+  if (isCreatingRoom) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Creating Room
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600">Setting up room {roomCode}...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-  const shuffleTiles = async () => {
-    if (!currentPlayer) return;
+  if (roomExists === false) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="text-red-600">Room Not Found</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 mb-4">Room "{roomCode}" does not exist.</p>
+            <Button onClick={() => navigate("/")} className="w-full">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-    // Shuffle the player's tiles
-    const shuffledTiles = [...currentPlayer.tiles].sort(() => Math.random() - 0.5);
-    await updatePlayerTiles(shuffledTiles);
-    await refreshGameState();
-    
-    toast({
-      title: "Tiles shuffled",
-      description: "Your tiles have been shuffled."
-    });
-  };
+  if (isLoading || roomExists === null) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Loading Game
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600">Connecting to room {roomCode}...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-  const quitGame = () => {
-    localStorage.removeItem("playerName");
-    localStorage.removeItem("roomCode");
-    navigate("/");
-    
-    toast({
-      title: "Game left",
-      description: "You have left the game."
-    });
-  };
-
-  // Show connection error if there is one
   if (connectionError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Connection Failed</h2>
-          <p className="text-gray-600 mb-4">{connectionError}</p>
-          <button
-            onClick={() => navigate("/")}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors shadow-lg"
-          >
-            Return to Home
-          </button>
-        </div>
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="text-red-600">Connection Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 mb-4">{connectionError}</p>
+            <div className="space-y-2">
+              <Button onClick={() => window.location.reload()} className="w-full">
+                Try Again
+              </Button>
+              <Button onClick={() => navigate("/")} variant="outline" className="w-full">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Home
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  // Show loading state
-  if (isLoading || !isReady || !currentPlayer) {
+  if (!isReady) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Connecting to game...</p>
-          <p className="text-sm text-gray-500 mt-2">Room: {roomCode}</p>
-          <p className="text-sm text-gray-500">Player: {playerName}</p>
-          <p className="text-sm text-gray-500">Players in game: {gameState.players.length}</p>
-        </div>
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Waiting Room
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 mb-4">
+              Welcome to room <span className="font-mono font-bold">{roomCode}</span>!
+            </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Waiting for other players to join...
+            </p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Players in room:</p>
+              <ul className="text-sm text-gray-600">
+                {players.map((player, index) => (
+                  <li key={player.id} className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${player.isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
+                    {player.name} {player.name === playerName && '(You)'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {players.length >= 2 && !game?.game_started && (
+              <Button onClick={startGame} className="w-full mt-4">
+                Start Game
+              </Button>
+            )}
+            {players.length < 2 && (
+              <p className="text-sm text-gray-500 mt-4">
+                Need at least 2 players to start the game.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  const currentTurnPlayer = gameState.players[gameState.currentPlayerIndex];
-
+  // Main game interface
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
-      <GameHeader roomCode={roomCode || ""} currentPlayer={currentPlayer} />
-      
+    <div className="min-h-screen bg-gray-100">
+      <GameHeader
+        roomCode={roomCode}
+        players={gameState.players}
+        currentPlayerIndex={gameState.currentPlayerIndex}
+        isCurrentTurn={isCurrentTurn}
+        onLeave={() => navigate("/")}
+      />
       <div className="container mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3 space-y-6">
-            {/* Turn indicator */}
-            <div className="bg-white rounded-2xl shadow-lg p-4">
-              <div className="text-center">
-                {isMyTurn() ? (
-                  <p className="text-green-600 font-semibold text-lg">
-                    🎯 Your turn! Place your tiles and submit a word.
-                  </p>
-                ) : (
-                  <p className="text-gray-600 font-semibold text-lg">
-                    ⏳ {currentTurnPlayer?.name || 'Unknown'}'s turn. Please wait...
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Challenge notification - only show to other players, not the one who submitted */}
-            {pendingChallenge && currentPlayer && pendingChallenge.originalPlayerId !== currentPlayer.id && (
-              <div className="bg-orange-50 border border-orange-200 rounded-2xl shadow-lg p-4">
-                <div className="text-center">
-                  <p className="text-orange-700 font-semibold text-lg mb-3">
-                    A word has been played! You can challenge it if you think it's invalid.
-                  </p>
-                  <Button
-                    onClick={challengeWord}
-                    variant="outline"
-                    className="border-orange-300 text-orange-700 hover:bg-orange-100"
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-2" />
-                    Challenge Word
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <GameBoard
-                board={localBoard}
-                onTilePlacement={handleTilePlacement}
-                onTileDoubleClick={handleTileDoubleClick}
-              />
-            </div>
-            
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Tiles</h3>
-              <PlayerRack
-                tiles={currentPlayer?.tiles || []}
-                onTileSelect={() => {}}
-              />
-            </div>
-            
-            <div className="flex gap-4 justify-center flex-wrap">
-              <Button
-                onClick={submitWord}
-                disabled={placedTiles.length === 0 || !isMyTurn()}
-                className="px-8 py-3"
-              >
-                Submit Word ({placedTiles.length} tiles)
-              </Button>
-              
-              <Button
-                onClick={recallTiles}
-                disabled={placedTiles.length === 0 || !isMyTurn()}
-                variant="outline"
-                className="px-8 py-3"
-              >
-                Recall Tiles
-              </Button>
-
-              <Button
-                onClick={shuffleTiles}
-                disabled={!currentPlayer?.tiles.length}
-                variant="outline"
-                className="px-6 py-3"
-              >
-                <Shuffle className="w-4 h-4 mr-2" />
-                Shuffle
-              </Button>
-
-              <Button
-                onClick={quitGame}
-                variant="destructive"
-                className="px-6 py-3"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Quit Game
-              </Button>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-3">
+            <GameBoard
+              board={gameState.board}
+              onBoardUpdate={updateGameBoard}
+              currentPlayer={currentPlayer}
+              isCurrentTurn={isCurrentTurn}
+              tileBag={gameState.tileBag}
+              onTileBagUpdate={updateTileBag}
+              onPlayerTilesUpdate={updatePlayerTiles}
+              onPlayerScoreUpdate={updatePlayerScore}
+              onNextTurn={nextTurn}
+              onRefreshGameState={refreshGameState}
+              pendingChallenge={game?.pending_challenge}
+              onSetPendingChallenge={setPendingChallengeInGame}
+              onClearPendingChallenge={clearPendingChallengeInGame}
+            />
           </div>
-          
           <div className="lg:col-span-1">
             <GameSidebar
               players={gameState.players}
-              chatMessages={gameState.chatMessages}
-              onSendMessage={() => {}}
+              currentPlayerIndex={gameState.currentPlayerIndex}
+              currentPlayer={currentPlayer}
+              isCurrentTurn={isCurrentTurn}
+              gameStarted={gameState.gameStarted}
+              gameOver={gameState.gameOver}
+              onStartGame={startGame}
             />
           </div>
         </div>
       </div>
-
-      <BlankTileSelector
-        isOpen={blankTileSelector.isOpen}
-        onClose={() => setBlankTileSelector({ isOpen: false, tileId: null, position: null })}
-        onLetterSelect={handleBlankTileLetterSelect}
-      />
     </div>
   );
 };
