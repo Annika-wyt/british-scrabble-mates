@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
 import { Tile } from "@/types/game";
 import { calculateScore } from "@/utils/scoreUtils";
