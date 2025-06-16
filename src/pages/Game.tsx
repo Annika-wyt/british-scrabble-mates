@@ -6,8 +6,8 @@ import PlayerRack from "@/components/PlayerRack";
 import GameHeader from "@/components/GameHeader";
 import GameSidebar from "@/components/GameSidebar";
 import { useToast } from "@/hooks/use-toast";
-import { GameState, Player, Tile } from "@/types/game";
-import { generateInitialTiles, drawTiles } from "@/utils/tileUtils";
+import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
+import { Tile } from "@/types/game";
 import { validateWord } from "@/utils/dictionaryUtils";
 import { calculateScore } from "@/utils/scoreUtils";
 
@@ -16,51 +16,29 @@ const Game = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [gameState, setGameState] = useState<GameState>({
-    board: Array(15).fill(null).map(() => Array(15).fill(null)),
-    players: [],
-    currentPlayerIndex: 0,
-    tileBag: [],
-    gameStarted: false,
-    gameOver: false,
-    chatMessages: []
-  });
-
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  const [playerName, setPlayerName] = useState<string>("");
   const [placedTiles, setPlacedTiles] = useState<{row: number, col: number, tile: Tile}[]>([]);
 
+  const {
+    gameState,
+    currentPlayer,
+    updateGameBoard,
+    updatePlayerTiles,
+    updatePlayerScore,
+    isReady
+  } = useMultiplayerGame(roomCode || "", playerName);
+
   useEffect(() => {
-    const playerName = localStorage.getItem("playerName");
+    const storedPlayerName = localStorage.getItem("playerName");
     const storedRoomCode = localStorage.getItem("roomCode");
 
-    if (!playerName || !storedRoomCode || storedRoomCode !== roomCode) {
+    if (!storedPlayerName || !storedRoomCode || storedRoomCode !== roomCode) {
       navigate("/");
       return;
     }
 
-    // Initialize game
-    const tileBag = generateInitialTiles();
-    const player: Player = {
-      id: "player1",
-      name: playerName,
-      score: 0,
-      tiles: drawTiles(tileBag, 7),
-      isConnected: true
-    };
-
-    setCurrentPlayer(player);
-    setGameState(prev => ({
-      ...prev,
-      players: [player],
-      tileBag: tileBag.slice(7),
-      gameStarted: true
-    }));
-
-    toast({
-      title: "Game Created",
-      description: `Room ${roomCode} is ready! Share the code with your friend.`
-    });
-  }, [roomCode, navigate, toast]);
+    setPlayerName(storedPlayerName);
+  }, [roomCode, navigate]);
 
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
     if (gameState.board[row][col] !== null) return;
@@ -68,17 +46,13 @@ const Game = () => {
     const newBoard = gameState.board.map(boardRow => [...boardRow]);
     newBoard[row][col] = tile;
 
-    setGameState(prev => ({
-      ...prev,
-      board: newBoard
-    }));
-
+    updateGameBoard(newBoard);
     setPlacedTiles(prev => [...prev, { row, col, tile }]);
 
     // Remove tile from player's rack
     if (currentPlayer) {
       const updatedTiles = currentPlayer.tiles.filter(t => t.id !== tile.id);
-      setCurrentPlayer(prev => prev ? { ...prev, tiles: updatedTiles } : null);
+      updatePlayerTiles(updatedTiles);
     }
   };
 
@@ -86,7 +60,7 @@ const Game = () => {
     if (!currentPlayer) return;
 
     const updatedTiles = [...currentPlayer.tiles, tile];
-    setCurrentPlayer(prev => prev ? { ...prev, tiles: updatedTiles } : null);
+    updatePlayerTiles(updatedTiles);
   };
 
   const submitWord = async () => {
@@ -106,21 +80,8 @@ const Game = () => {
       const score = calculateScore(placedTiles, gameState.board);
       
       if (currentPlayer) {
-        // Draw new tiles to replace the ones used
-        const newTiles = drawTiles([...gameState.tileBag], placedTiles.length);
-        const remainingTileBag = gameState.tileBag.slice(placedTiles.length);
-        
-        const updatedPlayer = {
-          ...currentPlayer,
-          score: currentPlayer.score + score,
-          tiles: [...currentPlayer.tiles, ...newTiles]
-        };
-        
-        setCurrentPlayer(updatedPlayer);
-        setGameState(prev => ({
-          ...prev,
-          tileBag: remainingTileBag
-        }));
+        const newScore = currentPlayer.score + score;
+        updatePlayerScore(newScore);
         setPlacedTiles([]);
         
         toast({
@@ -133,12 +94,7 @@ const Game = () => {
       placedTiles.forEach(({ row, col, tile }) => {
         const newBoard = gameState.board.map(boardRow => [...boardRow]);
         newBoard[row][col] = null;
-        
-        setGameState(prev => ({
-          ...prev,
-          board: newBoard
-        }));
-        
+        updateGameBoard(newBoard);
         handleTileReturn(tile);
       });
       
@@ -156,12 +112,7 @@ const Game = () => {
     placedTiles.forEach(({ row, col, tile }) => {
       const newBoard = gameState.board.map(boardRow => [...boardRow]);
       newBoard[row][col] = null;
-      
-      setGameState(prev => ({
-        ...prev,
-        board: newBoard
-      }));
-      
+      updateGameBoard(newBoard);
       handleTileReturn(tile);
     });
     
@@ -173,34 +124,44 @@ const Game = () => {
     });
   };
 
-  if (!currentPlayer) {
-    return <div>Loading...</div>;
+  if (!isReady || !currentPlayer) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Connecting to game...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-red-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
       <GameHeader roomCode={roomCode || ""} currentPlayer={currentPlayer} />
       
       <div className="container mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3">
-            <GameBoard
-              board={gameState.board}
-              onTilePlacement={handleTilePlacement}
-            />
+          <div className="lg:col-span-3 space-y-6">
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <GameBoard
+                board={gameState.board}
+                onTilePlacement={handleTilePlacement}
+              />
+            </div>
             
-            <div className="mt-6">
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Tiles</h3>
               <PlayerRack
                 tiles={currentPlayer.tiles}
                 onTileSelect={() => {}}
               />
             </div>
             
-            <div className="flex gap-4 mt-6 justify-center">
+            <div className="flex gap-4 justify-center">
               <button
                 onClick={submitWord}
                 disabled={placedTiles.length === 0}
-                className="px-8 py-3 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors shadow-lg"
+                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors shadow-lg"
               >
                 Submit Word ({placedTiles.length} tiles)
               </button>
@@ -208,7 +169,7 @@ const Game = () => {
               <button
                 onClick={recallTiles}
                 disabled={placedTiles.length === 0}
-                className="px-8 py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-colors shadow-lg"
+                className="px-8 py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors shadow-lg"
               >
                 Recall Tiles
               </button>

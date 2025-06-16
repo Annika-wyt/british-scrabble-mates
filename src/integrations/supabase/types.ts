@@ -9,7 +9,125 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      game_moves: {
+        Row: {
+          created_at: string
+          game_id: string
+          id: string
+          move_data: Json
+          player_id: string
+          score: number
+        }
+        Insert: {
+          created_at?: string
+          game_id: string
+          id?: string
+          move_data: Json
+          player_id: string
+          score?: number
+        }
+        Update: {
+          created_at?: string
+          game_id?: string
+          id?: string
+          move_data?: Json
+          player_id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_moves_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_moves_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "game_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_players: {
+        Row: {
+          game_id: string
+          id: string
+          is_connected: boolean
+          joined_at: string
+          player_name: string
+          player_order: number
+          score: number
+          tiles: Json
+        }
+        Insert: {
+          game_id: string
+          id?: string
+          is_connected?: boolean
+          joined_at?: string
+          player_name: string
+          player_order: number
+          score?: number
+          tiles?: Json
+        }
+        Update: {
+          game_id?: string
+          id?: string
+          is_connected?: boolean
+          joined_at?: string
+          player_name?: string
+          player_order?: number
+          score?: number
+          tiles?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_players_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      games: {
+        Row: {
+          board: Json
+          created_at: string
+          current_player_index: number
+          game_over: boolean
+          game_started: boolean
+          id: string
+          room_code: string
+          tile_bag: Json
+          updated_at: string
+        }
+        Insert: {
+          board?: Json
+          created_at?: string
+          current_player_index?: number
+          game_over?: boolean
+          game_started?: boolean
+          id?: string
+          room_code: string
+          tile_bag?: Json
+          updated_at?: string
+        }
+        Update: {
+          board?: Json
+          created_at?: string
+          current_player_index?: number
+          game_over?: boolean
+          game_started?: boolean
+          id?: string
+          room_code?: string
+          tile_bag?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

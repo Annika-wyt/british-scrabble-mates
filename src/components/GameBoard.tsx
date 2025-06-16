@@ -63,17 +63,17 @@ const getBoardSquare = (row: number, col: number): BoardSquare => {
 const getSquareClasses = (square: BoardSquare) => {
   switch (square.type) {
     case 'center':
-      return 'bg-gradient-to-br from-pink-400 to-red-500 text-white font-bold';
+      return 'bg-gradient-to-br from-red-400 to-red-500 text-white';
     case 'triple-word':
-      return 'bg-gradient-to-br from-red-500 to-red-600 text-white font-bold';
+      return 'bg-gradient-to-br from-red-500 to-red-600 text-white';
     case 'double-word':
-      return 'bg-gradient-to-br from-pink-400 to-pink-500 text-white font-bold';
+      return 'bg-gradient-to-br from-pink-400 to-pink-500 text-white';
     case 'triple-letter':
-      return 'bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold';
+      return 'bg-gradient-to-br from-blue-500 to-blue-600 text-white';
     case 'double-letter':
-      return 'bg-gradient-to-br from-sky-400 to-sky-500 text-white font-bold';
+      return 'bg-gradient-to-br from-sky-400 to-sky-500 text-white';
     default:
-      return 'bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200';
+      return 'bg-gray-50 border-gray-200';
   }
 };
 
@@ -111,7 +111,6 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    // Only clear if we're leaving the board area
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDragOverSquare(null);
     }
@@ -134,7 +133,7 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
 
   return (
     <div className="flex justify-center">
-      <div className="grid grid-cols-15 gap-1 p-4 bg-gradient-to-br from-amber-100 to-orange-100 rounded-xl shadow-2xl border-4 border-amber-300">
+      <div className="grid grid-cols-15 gap-px p-4 bg-gray-300 rounded-2xl shadow-xl">
         {board.map((row, rowIndex) =>
           row.map((tile, colIndex) => {
             const square = getBoardSquare(rowIndex, colIndex);
@@ -144,10 +143,11 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
               <div
                 key={`${rowIndex}-${colIndex}`}
                 className={cn(
-                  "w-8 h-8 sm:w-10 sm:h-10 border-2 flex items-center justify-center text-xs sm:text-sm relative transition-all duration-200 hover:scale-105",
+                  "w-8 h-8 sm:w-10 sm:h-10 border flex items-center justify-center text-xs sm:text-sm relative transition-all duration-200",
                   getSquareClasses(square),
-                  tile ? 'bg-gradient-to-br from-yellow-200 to-yellow-300 border-yellow-400' : '',
-                  isDragOver && !tile ? 'bg-green-200 border-green-400 scale-110' : ''
+                  tile ? 'bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 text-gray-900' : '',
+                  isDragOver && !tile ? 'bg-green-200 border-green-400 scale-105' : '',
+                  square.type === 'normal' ? 'border-gray-300' : 'border-white/30'
                 )}
                 onDragOver={handleDragOver}
                 onDragEnter={(e) => handleDragEnter(e, rowIndex, colIndex)}
@@ -155,13 +155,13 @@ const GameBoard = ({ board, onTilePlacement }: GameBoardProps) => {
                 onDrop={(e) => handleDrop(e, rowIndex, colIndex)}
               >
                 {tile ? (
-                  <div className="text-black font-bold flex flex-col items-center leading-none">
+                  <div className="font-bold flex flex-col items-center leading-none">
                     <span className="text-lg">{tile.letter}</span>
                     <span className="text-xs">{tile.value}</span>
                   </div>
                 ) : (
                   square.type === 'center' ? (
-                    <Star className="w-4 h-4 text-yellow-300" />
+                    <Star className="w-4 h-4 text-white" />
                   ) : (
                     <span className="text-xs font-bold">
                       {getSquareLabel(square)}
