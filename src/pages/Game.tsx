@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -25,7 +24,9 @@ const Game = () => {
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
-    isReady
+    isReady,
+    isLoading,
+    connectionError
   } = useMultiplayerGame(roomCode || "", playerName);
 
   useEffect(() => {
@@ -124,12 +125,34 @@ const Game = () => {
     });
   };
 
-  if (!isReady || !currentPlayer) {
+  // Show connection error if there is one
+  if (connectionError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Connection Failed</h2>
+          <p className="text-gray-600 mb-4">{connectionError}</p>
+          <button
+            onClick={() => navigate("/")}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors shadow-lg"
+          >
+            Return to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state
+  if (isLoading || !isReady || !currentPlayer) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Connecting to game...</p>
+          <p className="text-sm text-gray-500 mt-2">Room: {roomCode}</p>
+          <p className="text-sm text-gray-500">Player: {playerName}</p>
         </div>
       </div>
     );
