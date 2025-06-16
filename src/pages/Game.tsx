@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -41,27 +42,32 @@ const Game = () => {
     setPlayerName(storedPlayerName);
   }, [roomCode, navigate]);
 
-  const handleTilePlacement = (row: number, col: number, tile: Tile) => {
+  const handleTilePlacement = async (row: number, col: number, tile: Tile) => {
     if (gameState.board[row][col] !== null) return;
 
-    const newBoard = gameState.board.map(boardRow => [...boardRow]);
-    newBoard[row][col] = tile;
+    console.log('Placing tile:', { row, col, tile: tile.letter });
 
-    updateGameBoard(newBoard);
+    // Don't update local state immediately - let the database update and real-time sync handle it
     setPlacedTiles(prev => [...prev, { row, col, tile }]);
 
-    // Remove tile from player's rack
+    // Remove tile from player's rack locally first for immediate feedback
     if (currentPlayer) {
       const updatedTiles = currentPlayer.tiles.filter(t => t.id !== tile.id);
-      updatePlayerTiles(updatedTiles);
+      await updatePlayerTiles(updatedTiles);
     }
+
+    // Update the board in the database
+    const newBoard = gameState.board.map(boardRow => [...boardRow]);
+    newBoard[row][col] = tile;
+    await updateGameBoard(newBoard);
   };
 
-  const handleTileReturn = (tile: Tile) => {
+  const handleTileReturn = async (tile: Tile) => {
     if (!currentPlayer) return;
 
+    console.log('Returning tile to rack:', tile.letter);
     const updatedTiles = [...currentPlayer.tiles, tile];
-    updatePlayerTiles(updatedTiles);
+    await updatePlayerTiles(updatedTiles);
   };
 
   const submitWord = async () => {
@@ -74,6 +80,8 @@ const Game = () => {
       return;
     }
 
+    console.log('Submitting word with tiles:', placedTiles);
+
     // Basic word validation (in real game, this would check against dictionary)
     const isValid = await validateWord("test"); // Placeholder
     
@@ -82,7 +90,7 @@ const Game = () => {
       
       if (currentPlayer) {
         const newScore = currentPlayer.score + score;
-        updatePlayerScore(newScore);
+        await updatePlayerScore(newScore);
         setPlacedTiles([]);
         
         toast({
@@ -92,12 +100,12 @@ const Game = () => {
       }
     } else {
       // Return tiles to rack
-      placedTiles.forEach(({ row, col, tile }) => {
+      for (const { row, col, tile } of placedTiles) {
         const newBoard = gameState.board.map(boardRow => [...boardRow]);
         newBoard[row][col] = null;
-        updateGameBoard(newBoard);
-        handleTileReturn(tile);
-      });
+        await updateGameBoard(newBoard);
+        await handleTileReturn(tile);
+      }
       
       setPlacedTiles([]);
       
@@ -109,13 +117,15 @@ const Game = () => {
     }
   };
 
-  const recallTiles = () => {
-    placedTiles.forEach(({ row, col, tile }) => {
+  const recallTiles = async () => {
+    console.log('Recalling tiles:', placedTiles);
+    
+    for (const { row, col, tile } of placedTiles) {
       const newBoard = gameState.board.map(boardRow => [...boardRow]);
       newBoard[row][col] = null;
-      updateGameBoard(newBoard);
-      handleTileReturn(tile);
-    });
+      await updateGameBoard(newBoard);
+      await handleTileReturn(tile);
+    }
     
     setPlacedTiles([]);
     
@@ -153,6 +163,7 @@ const Game = () => {
           <p className="text-gray-600">Connecting to game...</p>
           <p className="text-sm text-gray-500 mt-2">Room: {roomCode}</p>
           <p className="text-sm text-gray-500">Player: {playerName}</p>
+          <p className="text-sm text-gray-500">Players in game: {gameState.players.length}</p>
         </div>
       </div>
     );

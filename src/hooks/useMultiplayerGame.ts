@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -230,15 +231,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           isConnected: p.is_connected
         }));
 
-        setGameState({
+        setGameState(prevState => ({
+          ...prevState,
           board: Array.isArray(game.board) ? game.board as unknown as (Tile | null)[][] : Array(15).fill(null).map(() => Array(15).fill(null)),
           players: gameStatePlayers,
           currentPlayerIndex: game.current_player_index,
           tileBag: Array.isArray(game.tile_bag) ? game.tile_bag as unknown as Tile[] : [],
           gameStarted: game.game_started,
-          gameOver: game.game_over,
-          chatMessages: []
-        });
+          gameOver: game.game_over
+        }));
 
         // Set current player
         if (currentPlayerId) {
@@ -259,13 +260,19 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     if (!gameId) return;
 
     try {
-      await supabase
+      console.log('Updating board in database');
+      const { error } = await supabase
         .from('games')
         .update({ 
           board: newBoard as any,
           updated_at: new Date().toISOString()
         })
         .eq('id', gameId);
+
+      if (error) {
+        console.error('Error updating board:', error);
+        throw error;
+      }
     } catch (error) {
       console.error('Error updating board:', error);
     }
@@ -275,10 +282,16 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     if (!playerId) return;
 
     try {
-      await supabase
+      console.log('Updating player tiles in database');
+      const { error } = await supabase
         .from('game_players')
         .update({ tiles: tiles as any })
         .eq('id', playerId);
+
+      if (error) {
+        console.error('Error updating player tiles:', error);
+        throw error;
+      }
     } catch (error) {
       console.error('Error updating player tiles:', error);
     }
@@ -288,10 +301,16 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     if (!playerId) return;
 
     try {
-      await supabase
+      console.log('Updating player score in database');
+      const { error } = await supabase
         .from('game_players')
         .update({ score })
         .eq('id', playerId);
+
+      if (error) {
+        console.error('Error updating player score:', error);
+        throw error;
+      }
     } catch (error) {
       console.error('Error updating player score:', error);
     }
@@ -303,8 +322,9 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
 
     console.log('Setting up real-time subscriptions for game:', gameId);
 
+    // Create a channel specifically for this game
     const gameChannel = supabase
-      .channel(`game-${gameId}`)
+      .channel(`game-updates-${gameId}`)
       .on(
         'postgres_changes',
         {
@@ -314,7 +334,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           filter: `id=eq.${gameId}`
         },
         (payload) => {
-          console.log('Game table change detected:', payload);
+          console.log('Game table change detected:', payload.eventType);
           loadGameState();
         }
       )
@@ -327,12 +347,18 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           filter: `game_id=eq.${gameId}`
         },
         (payload) => {
-          console.log('Players table change detected:', payload);
+          console.log('Players table change detected:', payload.eventType);
           loadGameState();
         }
       )
       .subscribe((status) => {
         console.log('Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to real-time updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Channel subscription error');
+          setConnectionError('Real-time connection failed');
+        }
       });
 
     return () => {
