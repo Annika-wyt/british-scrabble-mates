@@ -3,11 +3,21 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Game, GamePlayer, Tile } from '@/types/game';
+import { Game, GamePlayer, Tile, PendingChallenge, GameState, Player } from '@/types/game';
 import { generateInitialTiles } from '@/utils/tileUtils';
 
 export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [gameState, setGameState] = useState<GameState>({
+    board: Array(15).fill(null).map(() => Array(15).fill(null)),
+    players: [],
+    currentPlayerIndex: 0,
+    tileBag: [],
+    gameStarted: false,
+    gameOver: false,
+    chatMessages: []
+  });
   const queryClient = useQueryClient();
 
   // Set player context for RLS
@@ -19,6 +29,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         });
         if (error) {
           console.error('Error setting player context:', error);
+          setConnectionError('Failed to set player context');
         }
       }
     };
@@ -58,6 +69,29 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     },
     enabled: !!game?.id,
   });
+
+  // Update gameState when data changes
+  useEffect(() => {
+    if (game && players) {
+      const mappedPlayers: Player[] = players.map(p => ({
+        id: p.id,
+        name: p.player_name,
+        score: p.score,
+        tiles: p.tiles as Tile[],
+        isConnected: p.is_connected
+      }));
+
+      setGameState({
+        board: game.board as (Tile | null)[][],
+        players: mappedPlayers,
+        currentPlayerIndex: game.current_player_index,
+        tileBag: game.tile_bag as Tile[],
+        gameStarted: game.game_started,
+        gameOver: game.game_over,
+        chatMessages: []
+      });
+    }
+  }, [game, players]);
 
   // Join game function
   const joinGame = useCallback(async () => {
@@ -99,6 +133,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     } catch (error) {
       console.error('Error joining game:', error);
       toast.error('Failed to join game');
+      setConnectionError('Failed to join game');
     }
   }, [game, playerName, players, roomCode, queryClient]);
 
@@ -124,8 +159,8 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         .from('games')
         .update({
           game_started: true,
-          tile_bag: tiles,
-          board: Array(15).fill(null).map(() => Array(15).fill(null)),
+          tile_bag: tiles as any,
+          board: Array(15).fill(null).map(() => Array(15).fill(null)) as any,
         })
         .eq('id', game.id);
 
@@ -135,7 +170,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       for (const player of updatedPlayers) {
         const { error } = await supabase
           .from('game_players')
-          .update({ tiles: player.tiles })
+          .update({ tiles: player.tiles as any })
           .eq('id', player.id);
 
         if (error) throw error;
@@ -149,6 +184,128 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       toast.error('Failed to start game');
     }
   }, [game, players, roomCode, queryClient]);
+
+  // Game action functions
+  const updateGameBoard = useCallback(async (newBoard: (Tile | null)[][]) => {
+    if (!game) return;
+    
+    const { error } = await supabase
+      .from('games')
+      .update({ board: newBoard as any })
+      .eq('id', game.id);
+    
+    if (error) {
+      console.error('Error updating board:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
+  }, [game, roomCode, queryClient]);
+
+  const updatePlayerTiles = useCallback(async (newTiles: Tile[]) => {
+    const currentPlayer = players?.find(p => p.player_name === playerName);
+    if (!currentPlayer) return;
+    
+    const { error } = await supabase
+      .from('game_players')
+      .update({ tiles: newTiles as any })
+      .eq('id', currentPlayer.id);
+    
+    if (error) {
+      console.error('Error updating player tiles:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
+  }, [players, playerName, game?.id, queryClient]);
+
+  const updatePlayerScore = useCallback(async (newScore: number) => {
+    const currentPlayer = players?.find(p => p.player_name === playerName);
+    if (!currentPlayer) return;
+    
+    const { error } = await supabase
+      .from('game_players')
+      .update({ score: newScore })
+      .eq('id', currentPlayer.id);
+    
+    if (error) {
+      console.error('Error updating player score:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
+  }, [players, playerName, game?.id, queryClient]);
+
+  const updateTileBag = useCallback(async (newTileBag: Tile[]) => {
+    if (!game) return;
+    
+    const { error } = await supabase
+      .from('games')
+      .update({ tile_bag: newTileBag as any })
+      .eq('id', game.id);
+    
+    if (error) {
+      console.error('Error updating tile bag:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
+  }, [game, roomCode, queryClient]);
+
+  const nextTurn = useCallback(async () => {
+    if (!game || !players) return;
+    
+    const nextPlayerIndex = (game.current_player_index + 1) % players.length;
+    
+    const { error } = await supabase
+      .from('games')
+      .update({ current_player_index: nextPlayerIndex })
+      .eq('id', game.id);
+    
+    if (error) {
+      console.error('Error updating turn:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
+  }, [game, players, roomCode, queryClient]);
+
+  const setPendingChallengeInGame = useCallback(async (challenge: PendingChallenge) => {
+    if (!game) return;
+    
+    const { error } = await supabase
+      .from('games')
+      .update({ pending_challenge: challenge as any })
+      .eq('id', game.id);
+    
+    if (error) {
+      console.error('Error setting pending challenge:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
+  }, [game, roomCode, queryClient]);
+
+  const clearPendingChallengeInGame = useCallback(async () => {
+    if (!game) return;
+    
+    const { error } = await supabase
+      .from('games')
+      .update({ pending_challenge: null })
+      .eq('id', game.id);
+    
+    if (error) {
+      console.error('Error clearing pending challenge:', error);
+      throw error;
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
+  }, [game, roomCode, queryClient]);
+
+  const refreshGameState = useCallback(async () => {
+    queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
+    queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
+  }, [queryClient, roomCode, game?.id]);
 
   // Real-time subscriptions
   useEffect(() => {
@@ -190,15 +347,29 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   const currentPlayer = players?.find(p => p.player_name === playerName);
   const isCurrentTurn = game && currentPlayer && 
     players?.[game.current_player_index]?.player_name === playerName;
+  const pendingChallenge = game?.pending_challenge as PendingChallenge | null;
+  const isReady = !!game && !!players && !!currentPlayer;
 
   return {
     game,
-    players,
+    players: players || [],
     currentPlayer,
+    gameState,
+    pendingChallenge,
     isLoading: gameLoading || playersLoading,
     isConnected,
     isCurrentTurn,
+    isReady,
+    connectionError,
     joinGame,
     startGame,
+    updateGameBoard,
+    updatePlayerTiles,
+    updatePlayerScore,
+    updateTileBag,
+    nextTurn,
+    refreshGameState,
+    setPendingChallengeInGame,
+    clearPendingChallengeInGame,
   };
 };

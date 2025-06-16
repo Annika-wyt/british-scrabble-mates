@@ -1,3 +1,4 @@
+
 export interface Tile {
   letter: string;
   value: number;
@@ -12,6 +13,30 @@ export interface Player {
   score: number;
   tiles: Tile[];
   isConnected: boolean;
+}
+
+export interface GamePlayer {
+  id: string;
+  game_id: string;
+  player_name: string;
+  player_order: number;
+  score: number;
+  tiles: Tile[];
+  is_connected: boolean;
+  joined_at: string;
+}
+
+export interface Game {
+  id: string;
+  room_code: string;
+  board: (Tile | null)[][];
+  current_player_index: number;
+  tile_bag: Tile[];
+  game_started: boolean;
+  game_over: boolean;
+  pending_challenge: PendingChallenge | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ChatMessage {
