@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -316,6 +315,30 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     }
   }, [playerId]);
 
+  const nextTurn = useCallback(async () => {
+    if (!gameId || !gameState.players.length) return;
+
+    try {
+      console.log('Moving to next turn');
+      const nextPlayerIndex = (gameState.currentPlayerIndex + 1) % gameState.players.length;
+      
+      const { error } = await supabase
+        .from('games')
+        .update({ 
+          current_player_index: nextPlayerIndex,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', gameId);
+
+      if (error) {
+        console.error('Error updating turn:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error moving to next turn:', error);
+    }
+  }, [gameId, gameState.currentPlayerIndex, gameState.players.length]);
+
   // Set up real-time subscriptions
   useEffect(() => {
     if (!gameId) return;
@@ -381,6 +404,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
+    nextTurn,
     isReady: !!gameId && !!playerId && !isLoading,
     isLoading,
     connectionError

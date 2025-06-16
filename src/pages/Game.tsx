@@ -25,6 +25,7 @@ const Game = () => {
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
+    nextTurn,
     isReady,
     isLoading,
     connectionError
@@ -42,24 +43,41 @@ const Game = () => {
     setPlayerName(storedPlayerName);
   }, [roomCode, navigate]);
 
+  // Check if it's current player's turn
+  const isMyTurn = () => {
+    if (!currentPlayer || !gameState.players.length) return false;
+    const currentTurnPlayer = gameState.players[gameState.currentPlayerIndex];
+    return currentTurnPlayer?.id === currentPlayer.id;
+  };
+
   const handleTilePlacement = async (row: number, col: number, tile: Tile) => {
+    if (!isMyTurn()) {
+      toast({
+        title: "Not your turn",
+        description: "Please wait for your turn to place tiles.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (gameState.board[row][col] !== null) return;
 
     console.log('Placing tile:', { row, col, tile: tile.letter });
 
-    // Don't update local state immediately - let the database update and real-time sync handle it
-    setPlacedTiles(prev => [...prev, { row, col, tile }]);
+    // Add to placed tiles for tracking
+    const newPlacedTiles = [...placedTiles, { row, col, tile }];
+    setPlacedTiles(newPlacedTiles);
 
-    // Remove tile from player's rack locally first for immediate feedback
+    // Update board first
+    const newBoard = gameState.board.map(boardRow => [...boardRow]);
+    newBoard[row][col] = tile;
+    await updateGameBoard(newBoard);
+
+    // Remove tile from player's rack
     if (currentPlayer) {
       const updatedTiles = currentPlayer.tiles.filter(t => t.id !== tile.id);
       await updatePlayerTiles(updatedTiles);
     }
-
-    // Update the board in the database
-    const newBoard = gameState.board.map(boardRow => [...boardRow]);
-    newBoard[row][col] = tile;
-    await updateGameBoard(newBoard);
   };
 
   const handleTileReturn = async (tile: Tile) => {
@@ -71,6 +89,15 @@ const Game = () => {
   };
 
   const submitWord = async () => {
+    if (!isMyTurn()) {
+      toast({
+        title: "Not your turn",
+        description: "Please wait for your turn to submit a word.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (placedTiles.length === 0) {
       toast({
         title: "No tiles placed",
@@ -91,11 +118,14 @@ const Game = () => {
       if (currentPlayer) {
         const newScore = currentPlayer.score + score;
         await updatePlayerScore(newScore);
+        
+        // Clear placed tiles and move to next player
         setPlacedTiles([]);
+        await nextTurn();
         
         toast({
           title: "Word accepted!",
-          description: `You scored ${score} points!`
+          description: `You scored ${score} points! It's now the next player's turn.`
         });
       }
     } else {
@@ -118,12 +148,25 @@ const Game = () => {
   };
 
   const recallTiles = async () => {
+    if (!isMyTurn()) {
+      toast({
+        title: "Not your turn",
+        description: "Please wait for your turn to recall tiles.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     console.log('Recalling tiles:', placedTiles);
     
+    // Process each placed tile
     for (const { row, col, tile } of placedTiles) {
+      // Remove from board
       const newBoard = gameState.board.map(boardRow => [...boardRow]);
       newBoard[row][col] = null;
       await updateGameBoard(newBoard);
+      
+      // Return to player's rack
       await handleTileReturn(tile);
     }
     
@@ -169,6 +212,8 @@ const Game = () => {
     );
   }
 
+  const currentTurnPlayer = gameState.players[gameState.currentPlayerIndex];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
       <GameHeader roomCode={roomCode || ""} currentPlayer={currentPlayer} />
@@ -176,6 +221,21 @@ const Game = () => {
       <div className="container mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3 space-y-6">
+            {/* Turn indicator */}
+            <div className="bg-white rounded-2xl shadow-lg p-4">
+              <div className="text-center">
+                {isMyTurn() ? (
+                  <p className="text-green-600 font-semibold text-lg">
+                    🎯 Your turn! Place your tiles and submit a word.
+                  </p>
+                ) : (
+                  <p className="text-gray-600 font-semibold text-lg">
+                    ⏳ {currentTurnPlayer?.name || 'Unknown'}'s turn. Please wait...
+                  </p>
+                )}
+              </div>
+            </div>
+
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <GameBoard
                 board={gameState.board}
@@ -194,7 +254,7 @@ const Game = () => {
             <div className="flex gap-4 justify-center">
               <button
                 onClick={submitWord}
-                disabled={placedTiles.length === 0}
+                disabled={placedTiles.length === 0 || !isMyTurn()}
                 className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors shadow-lg"
               >
                 Submit Word ({placedTiles.length} tiles)
@@ -202,7 +262,7 @@ const Game = () => {
               
               <button
                 onClick={recallTiles}
-                disabled={placedTiles.length === 0}
+                disabled={placedTiles.length === 0 || !isMyTurn()}
                 className="px-8 py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors shadow-lg"
               >
                 Recall Tiles
