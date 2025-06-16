@@ -10,7 +10,9 @@ import { toast } from "sonner";
 import GameBoard from "@/components/GameBoard";
 import GameSidebar from "@/components/GameSidebar";
 import GameHeader from "@/components/GameHeader";
+import PlayerRack from "@/components/PlayerRack";
 import { ChatMessage, Tile } from "@/types/game";
+import { drawNewTiles, removePlayerTiles } from "@/utils/tileManagementUtils";
 
 const Game = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -19,6 +21,7 @@ const Game = () => {
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [roomExists, setRoomExists] = useState<boolean | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
 
   const {
     game,
@@ -141,15 +144,30 @@ const Game = () => {
     const newBoard = gameState.board.map(boardRow => [...boardRow]);
     newBoard[row][col] = tile;
     updateGameBoard(newBoard);
+
+    // Remove the tile from player's tiles
+    if (currentPlayer) {
+      const updatedTiles = removePlayerTiles(currentPlayer.tiles, [tile]);
+      updatePlayerTiles(updatedTiles);
+    }
   };
 
   const handleTileDoubleClick = (row: number, col: number) => {
-    // Remove tile from board if it exists
-    if (gameState.board[row][col]) {
+    // Remove tile from board if it exists and return it to player's tiles
+    const tileOnBoard = gameState.board[row][col];
+    if (tileOnBoard && currentPlayer) {
       const newBoard = gameState.board.map(boardRow => [...boardRow]);
       newBoard[row][col] = null;
       updateGameBoard(newBoard);
+
+      // Add the tile back to player's tiles
+      const updatedTiles = [...currentPlayer.tiles, tileOnBoard];
+      updatePlayerTiles(updatedTiles);
     }
+  };
+
+  const handleTileSelect = (tile: Tile) => {
+    setSelectedTile(tile);
   };
 
   const handleSendMessage = (message: string) => {
@@ -386,6 +404,16 @@ const Game = () => {
               onTilePlacement={handleTilePlacement}
               onTileDoubleClick={handleTileDoubleClick}
             />
+            
+            {/* Player Rack */}
+            {currentPlayer && game?.game_started && (
+              <div className="mt-6">
+                <PlayerRack
+                  tiles={currentPlayer.tiles || []}
+                  onTileSelect={handleTileSelect}
+                />
+              </div>
+            )}
           </div>
           <div className="lg:col-span-1">
             <GameSidebar
