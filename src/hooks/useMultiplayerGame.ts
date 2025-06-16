@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -5,7 +6,9 @@ import { GameState, Player, Tile } from "@/types/game";
 import { generateInitialTiles, drawTiles } from "@/utils/tileUtils";
 import { Database } from "@/integrations/supabase/types";
 
-type DbGame = Database['public']['Tables']['games']['Row'];
+type DbGame = Database['public']['Tables']['games']['Row'] & {
+  pending_challenge?: any;
+};
 type DbPlayer = Database['public']['Tables']['game_players']['Row'];
 
 export const useMultiplayerGame = (roomCode: string, playerName: string) => {
@@ -85,7 +88,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
 
       if (existingGame) {
         console.log('Found existing game:', existingGame.id);
-        game = existingGame;
+        game = existingGame as DbGame;
         setGameId(game.id);
       } else {
         // Create new game
@@ -109,7 +112,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         }
         
         console.log('Created new game:', newGame.id);
-        game = newGame;
+        game = newGame as DbGame;
         setGameId(game.id);
       }
 
@@ -276,9 +279,10 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           chatMessages: []
         });
 
-        // Set pending challenge from database
-        if (game.pending_challenge) {
-          setPendingChallenge(game.pending_challenge as any);
+        // Set pending challenge from database - use type assertion since types haven't been regenerated yet
+        const gameWithChallenge = game as DbGame;
+        if (gameWithChallenge.pending_challenge) {
+          setPendingChallenge(gameWithChallenge.pending_challenge as any);
         } else {
           setPendingChallenge(null);
         }

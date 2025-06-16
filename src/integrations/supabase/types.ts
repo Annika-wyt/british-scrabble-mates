@@ -100,6 +100,7 @@ export type Database = {
           game_over: boolean
           game_started: boolean
           id: string
+          pending_challenge: Json | null
           room_code: string
           tile_bag: Json
           updated_at: string
@@ -111,6 +112,7 @@ export type Database = {
           game_over?: boolean
           game_started?: boolean
           id?: string
+          pending_challenge?: Json | null
           room_code: string
           tile_bag?: Json
           updated_at?: string
@@ -122,6 +124,7 @@ export type Database = {
           game_over?: boolean
           game_started?: boolean
           id?: string
+          pending_challenge?: Json | null
           room_code?: string
           tile_bag?: Json
           updated_at?: string
