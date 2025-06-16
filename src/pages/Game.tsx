@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -349,8 +348,8 @@ const Game = () => {
               </div>
             </div>
 
-            {/* Challenge notification */}
-            {pendingChallenge && !isMyTurn() && (
+            {/* Challenge notification - only show to other players, not the one who submitted */}
+            {pendingChallenge && currentPlayer && pendingChallenge.originalPlayerId !== currentPlayer.id && (
               <div className="bg-orange-50 border border-orange-200 rounded-2xl shadow-lg p-4">
                 <div className="text-center">
                   <p className="text-orange-700 font-semibold text-lg mb-3">
