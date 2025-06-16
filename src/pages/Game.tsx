@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -199,64 +200,44 @@ const Game = () => {
     await startGame();
   };
 
-  // Enhanced isRoomCreator calculation with comprehensive debug logging
-  const getRoomCreatorInfo = () => {
-    console.log('=== ROOM CREATOR CALCULATION DEBUG ===');
+  // Simplified room creator detection
+  const isRoomCreator = () => {
+    console.log('=== SIMPLIFIED ROOM CREATOR CHECK ===');
     console.log('Current player:', currentPlayer);
-    console.log('Players array:', players);
-    console.log('Players length:', players.length);
-    
-    if (!currentPlayer) {
-      console.log('❌ No current player found');
-      return { isRoomCreator: false, reason: 'No current player' };
-    }
-    
-    if (!players || players.length === 0) {
-      console.log('❌ No players array or empty players');
-      return { isRoomCreator: false, reason: 'No players' };
+    console.log('Players:', players);
+    console.log('PlayerName prop:', playerName);
+
+    if (!currentPlayer || !players || players.length === 0) {
+      console.log('❌ Missing required data');
+      return false;
     }
 
-    // Sort players by player_order to find the first player
+    // Find the player with the lowest player_order (room creator)
     const sortedPlayers = [...players].sort((a, b) => a.player_order - b.player_order);
-    console.log('Sorted players by order:', sortedPlayers.map(p => ({ 
-      id: p.id, 
-      name: p.player_name || p.name, 
-      order: p.player_order 
-    })));
+    const roomCreator = sortedPlayers[0];
     
-    const firstPlayer = sortedPlayers[0];
-    console.log('First player (room creator):', {
-      id: firstPlayer?.id,
-      name: firstPlayer?.player_name || firstPlayer?.name,
-      order: firstPlayer?.player_order
+    console.log('Room creator (lowest order):', {
+      id: roomCreator?.id,
+      name: roomCreator?.player_name,
+      order: roomCreator?.player_order
     });
+
+    // Check if current player is the room creator
+    const isCreator = currentPlayer.id === roomCreator?.id;
+    console.log('Is current player the room creator?', isCreator);
+    console.log('=== END ROOM CREATOR CHECK ===');
     
-    // Check multiple ways to match current player
-    const currentPlayerIdMatch = firstPlayer?.id === currentPlayer.id;
-    const currentPlayerNameMatch = (firstPlayer?.player_name || firstPlayer?.name) === 
-                                  (currentPlayer.player_name || currentPlayer.name || playerName);
-    
-    console.log('Current player ID match:', currentPlayerIdMatch);
-    console.log('Current player name match:', currentPlayerNameMatch);
-    console.log('Current player data for comparison:', {
-      id: currentPlayer.id,
-      name: currentPlayer.player_name || currentPlayer.name,
-      storedPlayerName: playerName
-    });
-    
-    const isRoomCreator = currentPlayerIdMatch || currentPlayerNameMatch;
-    console.log('✅ Final isRoomCreator result:', isRoomCreator);
-    console.log('=== END ROOM CREATOR DEBUG ===');
-    
-    return { 
-      isRoomCreator, 
-      reason: isRoomCreator ? 'Is room creator' : 'Not room creator',
-      matchMethod: currentPlayerIdMatch ? 'ID match' : currentPlayerNameMatch ? 'Name match' : 'No match'
-    };
+    return isCreator;
   };
 
-  const roomCreatorInfo = getRoomCreatorInfo();
-  const isRoomCreator = roomCreatorInfo.isRoomCreator;
+  const roomCreator = isRoomCreator();
+
+  // Modified condition for showing the waiting room vs game
+  // Only show game interface if game has started AND we have the minimum players
+  const shouldShowGameInterface = game?.game_started && players.length >= 2 && currentPlayer;
+  
+  // Show waiting room if game hasn't started OR we don't have enough players
+  const shouldShowWaitingRoom = !game?.game_started || players.length < 2;
 
   if (!roomCode) {
     return (
@@ -375,7 +356,8 @@ const Game = () => {
     );
   }
 
-  if (!isReady) {
+  // Show waiting room when game hasn't started or not enough players
+  if (shouldShowWaitingRoom) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <Card className="max-w-lg w-full">
@@ -389,10 +371,12 @@ const Game = () => {
             <div className="space-y-4">
               <div className="text-center">
                 <p className="text-lg font-semibold text-gray-800 mb-2">
-                  Players in Room ({players.length})
+                  Players in Room ({players.length}/2 minimum)
                 </p>
                 <p className="text-sm text-gray-500">
-                  Waiting for players to join...
+                  {players.length < 2 
+                    ? `Need ${2 - players.length} more player${2 - players.length === 1 ? '' : 's'} to start`
+                    : 'Ready to start!'}
                 </p>
               </div>
               
@@ -415,36 +399,40 @@ const Game = () => {
                 ))}
               </div>
 
-              {/* Room Creator Debug Info */}
+              {/* Debug info */}
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="text-sm text-blue-800">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-4 h-4" />
-                    <span className="font-medium">Room Status</span>
+                    <span className="font-medium">Debug Info</span>
                   </div>
-                  <p className="mb-2">
-                    {players.length < 2 
-                      ? `Need ${2 - players.length} more player${2 - players.length === 1 ? '' : 's'} to start` 
-                      : 'Ready to start! Waiting for room creator to begin.'}
-                  </p>
-                  <div className="text-xs bg-blue-100 p-2 rounded mt-2">
-                    <p><strong>Debug:</strong> Room Creator = {isRoomCreator ? 'YES' : 'NO'}</p>
-                    <p><strong>Reason:</strong> {roomCreatorInfo.reason}</p>
-                    {roomCreatorInfo.matchMethod && <p><strong>Match Method:</strong> {roomCreatorInfo.matchMethod}</p>}
-                  </div>
+                  <p><strong>Players count:</strong> {players.length}</p>
+                  <p><strong>Game started:</strong> {game?.game_started ? 'Yes' : 'No'}</p>
+                  <p><strong>Current player:</strong> {currentPlayer?.name || 'None'}</p>
+                  <p><strong>Is room creator:</strong> {roomCreator ? 'Yes' : 'No'}</p>
+                  <p><strong>Should show start button:</strong> {roomCreator && players.length >= 2 && !game?.game_started ? 'Yes' : 'No'}</p>
                 </div>
               </div>
 
-              {isRoomCreator && players.length >= 2 && !game?.game_started && (
+              {/* Start game button - only show if room creator, enough players, and game not started */}
+              {roomCreator && players.length >= 2 && !game?.game_started && (
                 <Button onClick={handleStartGame} className="w-full bg-green-600 hover:bg-green-700">
                   <Crown className="w-4 h-4 mr-2" />
-                  Start Game
+                  Start Game ({players.length} players)
                 </Button>
               )}
               
-              {!isRoomCreator && players.length >= 2 && (
-                <div className="text-center text-sm text-gray-500">
+              {/* Waiting message for non-creators */}
+              {!roomCreator && players.length >= 2 && !game?.game_started && (
+                <div className="text-center text-sm text-gray-500 p-3 bg-yellow-50 rounded-lg">
                   Waiting for room creator to start the game...
+                </div>
+              )}
+
+              {/* Need more players message */}
+              {players.length < 2 && (
+                <div className="text-center text-sm text-gray-500 p-3 bg-gray-50 rounded-lg">
+                  Share room code <strong>{roomCode}</strong> with friends to join!
                 </div>
               )}
 
@@ -528,17 +516,7 @@ const Game = () => {
     }
   };
 
-  // Debug logging to understand the state
-  console.log('Game state debug:', {
-    game: game,
-    gameStarted: game?.game_started,
-    currentPlayer: currentPlayer,
-    isReady: isReady,
-    placedTilesCount: placedTilesThisTurn.length,
-    isRoomCreator: isRoomCreator
-  });
-
-  // Main game interface
+  // Main game interface - only show when game has started and enough players
   return (
     <div className="min-h-screen bg-gray-100">
       <GameHeader
@@ -554,8 +532,8 @@ const Game = () => {
               onTileDoubleClick={handleTileDoubleClick}
             />
             
-            {/* Player Rack - Show when game started and player exists */}
-            {game?.game_started && currentPlayer && (
+            {/* Player Rack */}
+            {currentPlayer && (
               <div className="mt-6">
                 <PlayerRack
                   tiles={currentPlayer.tiles || []}
@@ -564,30 +542,18 @@ const Game = () => {
               </div>
             )}
 
-            {/* Debug info - temporarily show game state */}
-            <div className="mt-4 p-4 bg-yellow-100 border border-yellow-300 rounded">
-              <h4 className="font-bold">Debug Info:</h4>
-              <p>Game Started: {game?.game_started ? 'Yes' : 'No'}</p>
-              <p>Current Player: {currentPlayer ? 'Yes' : 'No'}</p>
-              <p>Is Ready: {isReady ? 'Yes' : 'No'}</p>
-              <p>Placed Tiles: {placedTilesThisTurn.length}</p>
-              <p>Is Room Creator: {isRoomCreator ? 'Yes' : 'No'}</p>
-            </div>
-
-            {/* Game Actions - Always show when game started */}
-            {game?.game_started && (
-              <GameActions
-                isCurrentTurn={isCurrentTurn}
-                canChallenge={false} // TODO: Implement proper challenge detection
-                playerTiles={currentPlayer?.tiles || []}
-                onShuffleTiles={handleShuffleTiles}
-                onSubmitWord={handleSubmitWord}
-                onRetrieveTiles={handleRetrieveTiles}
-                onQuitGame={handleQuitGame}
-                onChallenge={handleChallenge}
-                hasPlacedTiles={placedTilesThisTurn.length > 0}
-              />
-            )}
+            {/* Game Actions */}
+            <GameActions
+              isCurrentTurn={isCurrentTurn}
+              canChallenge={false} // TODO: Implement proper challenge detection
+              playerTiles={currentPlayer?.tiles || []}
+              onShuffleTiles={handleShuffleTiles}
+              onSubmitWord={handleSubmitWord}
+              onRetrieveTiles={handleRetrieveTiles}
+              onQuitGame={handleQuitGame}
+              onChallenge={handleChallenge}
+              hasPlacedTiles={placedTilesThisTurn.length > 0}
+            />
           </div>
           <div className="lg:col-span-1">
             <GameSidebar
