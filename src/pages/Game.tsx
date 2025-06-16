@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -9,6 +10,8 @@ import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
 import { Tile } from "@/types/game";
 import { validateWord } from "@/utils/dictionaryUtils";
 import { calculateScore } from "@/utils/scoreUtils";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, LogOut, Shuffle } from "lucide-react";
 
 const Game = () => {
   const { roomCode } = useParams();
@@ -17,6 +20,12 @@ const Game = () => {
 
   const [playerName, setPlayerName] = useState<string>("");
   const [placedTiles, setPlacedTiles] = useState<{row: number, col: number, tile: Tile}[]>([]);
+  const [pendingChallenge, setPendingChallenge] = useState<{
+    challengerId: string;
+    originalPlayerId: string;
+    placedTiles: {row: number, col: number, tile: Tile}[];
+    score: number;
+  } | null>(null);
 
   const {
     gameState,
@@ -121,48 +130,85 @@ const Game = () => {
 
     console.log('Submitting word with tiles:', placedTiles);
 
-    // Basic word validation (in real game, this would check against dictionary)
-    const isValid = await validateWord("test"); // Placeholder
+    // Calculate score for the placed tiles
+    const score = calculateScore(placedTiles, gameState.board);
     
-    if (isValid) {
-      const score = calculateScore(placedTiles, gameState.board);
+    if (currentPlayer) {
+      const newScore = currentPlayer.score + score;
+      await updatePlayerScore(newScore);
       
-      if (currentPlayer) {
-        const newScore = currentPlayer.score + score;
-        await updatePlayerScore(newScore);
-        
-        // Clear placed tiles and move to next player
-        setPlacedTiles([]);
-        await nextTurn();
-        
-        // Refresh game state to ensure board updates for all players
-        await refreshGameState();
-        
-        toast({
-          title: "Word accepted!",
-          description: `You scored ${score} points! It's now the next player's turn.`
-        });
-      }
-    } else {
-      // Return tiles to rack
-      for (const { row, col, tile } of placedTiles) {
-        const newBoard = gameState.board.map(boardRow => [...boardRow]);
-        newBoard[row][col] = null;
-        await updateGameBoard(newBoard);
-        await handleTileReturn(tile);
-      }
+      // Set up pending challenge state for other players
+      setPendingChallenge({
+        challengerId: "",
+        originalPlayerId: currentPlayer.id,
+        placedTiles: [...placedTiles],
+        score
+      });
       
+      // Clear placed tiles and move to next player
       setPlacedTiles([]);
+      await nextTurn();
       
-      // Refresh game state
+      // Refresh game state to ensure board updates for all players
       await refreshGameState();
       
       toast({
-        title: "Invalid word",
-        description: "Please try a different word.",
-        variant: "destructive"
+        title: "Word submitted!",
+        description: `You scored ${score} points! Other players can now challenge this word.`
       });
     }
+  };
+
+  const challengeWord = async () => {
+    if (!pendingChallenge || !currentPlayer) return;
+
+    // Extract word from placed tiles (simplified - in real game would be more complex)
+    const word = pendingChallenge.placedTiles.map(t => t.tile.letter).join('');
+    
+    console.log('Challenging word:', word);
+    
+    const isValid = await validateWord(word);
+    
+    if (isValid) {
+      // Valid word - challenger loses their turn
+      setPendingChallenge(null);
+      await nextTurn();
+      
+      toast({
+        title: "Challenge failed",
+        description: `The word "${word}" is valid. You lose your turn.`,
+        variant: "destructive"
+      });
+    } else {
+      // Invalid word - remove word and original player loses turn
+      const originalPlayer = gameState.players.find(p => p.id === pendingChallenge.originalPlayerId);
+      
+      if (originalPlayer) {
+        // Remove score from original player
+        const newScore = originalPlayer.score - pendingChallenge.score;
+        await updatePlayerScore(newScore);
+        
+        // Remove tiles from board
+        const newBoard = gameState.board.map(boardRow => [...boardRow]);
+        for (const { row, col } of pendingChallenge.placedTiles) {
+          newBoard[row][col] = null;
+        }
+        await updateGameBoard(newBoard);
+        
+        // Return tiles to tile bag (simplified - in real game would draw from bag)
+        console.log('Returning challenged tiles to tile bag');
+        
+        toast({
+          title: "Challenge successful",
+          description: `The word "${word}" is invalid. The original player loses their turn and tiles are returned.`
+        });
+      }
+      
+      setPendingChallenge(null);
+      await nextTurn();
+    }
+    
+    await refreshGameState();
   };
 
   const recallTiles = async () => {
@@ -217,6 +263,31 @@ const Game = () => {
     toast({
       title: "Tiles recalled",
       description: `All ${tilesToRecall.length} placed tiles have been returned to your rack.`
+    });
+  };
+
+  const shuffleTiles = async () => {
+    if (!currentPlayer) return;
+
+    // Shuffle the player's tiles
+    const shuffledTiles = [...currentPlayer.tiles].sort(() => Math.random() - 0.5);
+    await updatePlayerTiles(shuffledTiles);
+    await refreshGameState();
+    
+    toast({
+      title: "Tiles shuffled",
+      description: "Your tiles have been shuffled."
+    });
+  };
+
+  const quitGame = () => {
+    localStorage.removeItem("playerName");
+    localStorage.removeItem("roomCode");
+    navigate("/");
+    
+    toast({
+      title: "Game left",
+      description: "You have left the game."
     });
   };
 
@@ -278,6 +349,25 @@ const Game = () => {
               </div>
             </div>
 
+            {/* Challenge notification */}
+            {pendingChallenge && !isMyTurn() && (
+              <div className="bg-orange-50 border border-orange-200 rounded-2xl shadow-lg p-4">
+                <div className="text-center">
+                  <p className="text-orange-700 font-semibold text-lg mb-3">
+                    A word has been played! You can challenge it if you think it's invalid.
+                  </p>
+                  <Button
+                    onClick={challengeWord}
+                    variant="outline"
+                    className="border-orange-300 text-orange-700 hover:bg-orange-100"
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    Challenge Word
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <GameBoard
                 board={gameState.board}
@@ -293,22 +383,42 @@ const Game = () => {
               />
             </div>
             
-            <div className="flex gap-4 justify-center">
-              <button
+            <div className="flex gap-4 justify-center flex-wrap">
+              <Button
                 onClick={submitWord}
                 disabled={placedTiles.length === 0 || !isMyTurn()}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors shadow-lg"
+                className="px-8 py-3"
               >
                 Submit Word ({placedTiles.length} tiles)
-              </button>
+              </Button>
               
-              <button
+              <Button
                 onClick={recallTiles}
                 disabled={placedTiles.length === 0 || !isMyTurn()}
-                className="px-8 py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors shadow-lg"
+                variant="outline"
+                className="px-8 py-3"
               >
                 Recall Tiles
-              </button>
+              </Button>
+
+              <Button
+                onClick={shuffleTiles}
+                disabled={!currentPlayer?.tiles.length}
+                variant="outline"
+                className="px-6 py-3"
+              >
+                <Shuffle className="w-4 h-4 mr-2" />
+                Shuffle
+              </Button>
+
+              <Button
+                onClick={quitGame}
+                variant="destructive"
+                className="px-6 py-3"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Quit Game
+              </Button>
             </div>
           </div>
           
