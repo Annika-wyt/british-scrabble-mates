@@ -157,40 +157,52 @@ const Game = () => {
     await refreshGameState();
   };
 
-  // Allow players to redefine blank tiles before submitting
-  const handleTileDoubleClick = (row: number, col: number) => {
+  // Allow players to redefine blank tiles before submitting (improved logic)
+  const handleTileDoubleClick = async (row: number, col: number) => {
     if (!isMyTurn()) return;
 
-    // Check if this tile was placed in current turn and is a blank tile
-    const placedTile = placedTiles.find(pt => pt.row === row && pt.col === col);
-    if (placedTile && placedTile.tile.isBlank) {
-      // Remove from board and placed tiles, return to rack for redefinition
-      const newBoard = gameState.board.map(boardRow => [...boardRow]);
-      newBoard[row][col] = null;
-      updateGameBoard(newBoard);
+    // Check if this tile was placed in current turn
+    const placedTileIndex = placedTiles.findIndex(pt => pt.row === row && pt.col === col);
+    if (placedTileIndex === -1) return; // Not a tile placed in current turn
 
-      const newPlacedTiles = placedTiles.filter(pt => !(pt.row === row && pt.col === col));
-      setPlacedTiles(newPlacedTiles);
-
-      // Reset the tile and return to rack
-      const originalTile = {
-        ...placedTile.tile,
-        chosenLetter: undefined,
-        letter: '?'
-      };
-
-      if (currentPlayer) {
-        const updatedTiles = [...currentPlayer.tiles, originalTile];
-        updatePlayerTiles(updatedTiles);
-      }
-
-      refreshGameState();
-      
+    const placedTile = placedTiles[placedTileIndex];
+    
+    // Only allow redefinition of blank tiles
+    if (!placedTile.tile.isBlank) {
       toast({
-        title: "Blank tile recalled",
-        description: "You can now redefine this blank tile."
+        title: "Cannot redefine",
+        description: "You can only redefine blank tiles.",
+        variant: "destructive"
       });
+      return;
     }
+
+    // Remove from board and placed tiles
+    const newBoard = gameState.board.map(boardRow => [...boardRow]);
+    newBoard[row][col] = null;
+    await updateGameBoard(newBoard);
+
+    const newPlacedTiles = placedTiles.filter((_, index) => index !== placedTileIndex);
+    setPlacedTiles(newPlacedTiles);
+
+    // Reset the tile and return to rack
+    const originalTile = {
+      ...placedTile.tile,
+      chosenLetter: undefined,
+      letter: '?'
+    };
+
+    if (currentPlayer) {
+      const updatedTiles = [...currentPlayer.tiles, originalTile];
+      await updatePlayerTiles(updatedTiles);
+    }
+
+    await refreshGameState();
+    
+    toast({
+      title: "Blank tile recalled",
+      description: "You can now redefine this blank tile by placing it again."
+    });
   };
 
   const handleTileReturn = async (tile: Tile) => {
@@ -389,7 +401,17 @@ const Game = () => {
     
     // Return all tiles to player's rack in one batch
     if (currentPlayer) {
-      const tilesToReturn = tilesToRecall.map(({ tile }) => tile);
+      const tilesToReturn = tilesToRecall.map(({ tile }) => {
+        // Reset blank tiles to their original state when recalling
+        if (tile.isBlank) {
+          return {
+            ...tile,
+            chosenLetter: undefined,
+            letter: '?'
+          };
+        }
+        return tile;
+      });
       const updatedTiles = [...currentPlayer.tiles, ...tilesToReturn];
       console.log('Returning tiles to rack:', tilesToReturn.map(t => t.letter).join(', '));
       await updatePlayerTiles(updatedTiles);

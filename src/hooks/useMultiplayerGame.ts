@@ -85,7 +85,19 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         game = existingGame as DbGame;
         setGameId(game.id);
       } else {
-        // Create new game
+        // Check if this came from the home page create flow vs join flow
+        // If it's from localStorage with a fresh room code, allow creation
+        const storedRoomCode = localStorage.getItem("roomCode");
+        const isCreateFlow = storedRoomCode === roomCode;
+        
+        if (!isCreateFlow) {
+          // This is a join flow for a non-existent room - show error
+          setConnectionError(`Room "${roomCode}" does not exist. Please check the room code and try again.`);
+          setIsLoading(false);
+          return;
+        }
+
+        // Create new game (only for create flow)
         console.log('Creating new game with room code:', roomCode);
         const tileBag = generateInitialTiles();
         const { data: newGame, error } = await supabase

@@ -1,4 +1,3 @@
-
 import { Tile } from "@/types/game";
 
 // Standard Scrabble tile values
@@ -180,10 +179,6 @@ const calculateWordScore = (
       } else if (square.type === 'triple-word') {
         wordMultiplier *= 3;
         console.log(`Applied triple word bonus at (${row},${col})`);
-      } else if (square.type === 'center' && isFirstMoveOfGame) {
-        // Only apply center square bonus for the very first move of the game
-        wordMultiplier *= 2;
-        console.log(`Applied center square bonus at (${row},${col}) for first move`);
       }
     }
     
@@ -199,8 +194,8 @@ const calculateWordScore = (
 };
 
 export const getSquareMultiplier = (row: number, col: number): { type: string; multiplier: number } => {
-  // Center square
-  if (row === 7 && col === 7) return { type: 'center', multiplier: 2 };
+  // Center square is now just normal (no bonus)
+  if (row === 7 && col === 7) return { type: 'center', multiplier: 1 };
   
   // Triple word squares
   const tripleWordSquares = [

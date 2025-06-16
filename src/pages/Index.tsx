@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Gamepad2, Crown, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import RoomValidator from "@/components/RoomValidator";
 
 const Index = () => {
-  const [roomCode, setRoomCode] = useState("");
   const [playerName, setPlayerName] = useState("");
+  const [showJoinForm, setShowJoinForm] = useState(false);
   const navigate = useNavigate();
 
   const createRoom = () => {
@@ -19,11 +20,10 @@ const Index = () => {
     navigate(`/game/${newRoomCode}`);
   };
 
-  const joinRoom = () => {
-    if (!playerName.trim() || !roomCode.trim()) return;
+  const handleJoinGame = (roomCode: string) => {
     localStorage.setItem("playerName", playerName);
-    localStorage.setItem("roomCode", roomCode.toUpperCase());
-    navigate(`/game/${roomCode.toUpperCase()}`);
+    localStorage.setItem("roomCode", roomCode);
+    navigate(`/game/${roomCode}`);
   };
 
   return (
@@ -102,23 +102,22 @@ const Index = () => {
                   className="text-lg py-3 border-gray-300 focus:border-blue-500 rounded-xl"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Room Code</label>
-                <Input
-                  placeholder="Enter room code"
-                  value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  className="text-lg py-3 border-gray-300 focus:border-blue-500 rounded-xl uppercase"
+              
+              {!showJoinForm ? (
+                <Button 
+                  onClick={() => setShowJoinForm(true)}
+                  disabled={!playerName.trim()}
+                  className="w-full py-6 text-lg font-semibold bg-green-600 hover:bg-green-700 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  <Users className="w-5 h-5 mr-2" />
+                  Join Room
+                </Button>
+              ) : (
+                <RoomValidator 
+                  playerName={playerName}
+                  onJoinGame={handleJoinGame}
                 />
-              </div>
-              <Button 
-                onClick={joinRoom}
-                disabled={!playerName.trim() || !roomCode.trim()}
-                className="w-full py-6 text-lg font-semibold bg-green-600 hover:bg-green-700 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                <Users className="w-5 h-5 mr-2" />
-                Join Room
-              </Button>
+              )}
             </CardContent>
           </Card>
         </div>
