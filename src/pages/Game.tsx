@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -7,6 +8,7 @@ import GameSidebar from "@/components/GameSidebar";
 import BlankTileSelector from "@/components/BlankTileSelector";
 import { useToast } from "@/hooks/use-toast";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
+import { supabase } from "@/integrations/supabase/client";
 import { Tile, PendingChallenge } from "@/types/game";
 import { validateAllWordsFormed } from "@/utils/dictionaryUtils";
 import { calculateScore } from "@/utils/scoreUtils";
