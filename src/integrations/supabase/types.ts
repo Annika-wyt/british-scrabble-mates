@@ -136,6 +136,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_player_game_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          game_id: string
+        }[]
+      }
       set_player_context: {
         Args: { player_name: string }
         Returns: undefined

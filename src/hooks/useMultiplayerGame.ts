@@ -51,9 +51,9 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       // Convert the database data to our Game type with proper type casting
       return {
         ...data,
-        board: data.board as (Tile | null)[][],
-        tile_bag: data.tile_bag as Tile[],
-        pending_challenge: data.pending_challenge as PendingChallenge | null
+        board: (data.board as unknown) as (Tile | null)[][],
+        tile_bag: (data.tile_bag as unknown) as Tile[],
+        pending_challenge: data.pending_challenge ? (data.pending_challenge as unknown) as PendingChallenge : null
       } as Game;
     },
     enabled: !!roomCode,
@@ -76,7 +76,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       // Convert database data to GamePlayer type with proper type casting and computed properties
       return data.map(player => ({
         ...player,
-        tiles: player.tiles as Tile[],
+        tiles: (player.tiles as unknown) as Tile[],
         // Add computed properties for compatibility
         name: player.player_name,
         isConnected: player.is_connected
