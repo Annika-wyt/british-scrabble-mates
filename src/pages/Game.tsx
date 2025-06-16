@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -8,7 +9,7 @@ import BlankTileSelector from "@/components/BlankTileSelector";
 import { useToast } from "@/hooks/use-toast";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
 import { Tile, PendingChallenge } from "@/types/game";
-import { validateWord } from "@/utils/dictionaryUtils";
+import { validateAllWordsFormed } from "@/utils/dictionaryUtils";
 import { calculateScore } from "@/utils/scoreUtils";
 import { validateWordPlacement } from "@/utils/wordValidationUtils";
 import { drawNewTiles, restoreTilesToBag } from "@/utils/tileManagementUtils";
@@ -248,6 +249,17 @@ const Game = () => {
 
     console.log('Submitting word with tiles:', placedTiles);
 
+    // Validate all words formed using CSW dictionary
+    const wordValidation = await validateAllWordsFormed(placedTiles, gameState.board);
+    if (!wordValidation.isValid) {
+      toast({
+        title: "Invalid word(s)",
+        description: `The following words are not valid in CSW dictionary: ${wordValidation.invalidWords.join(', ')}`,
+        variant: "destructive"
+      });
+      return;
+    }
+
     // Calculate score for the placed tiles
     const score = calculateScore(placedTiles, gameState.board);
     
@@ -291,21 +303,22 @@ const Game = () => {
   const challengeWord = async () => {
     if (!pendingChallenge || !currentPlayer) return;
 
-    // Extract word from placed tiles (simplified - in real game would be more complex)
-    const word = pendingChallenge.placedTiles.map(t => t.tile.letter).join('');
+    // Get all words formed from the pending challenge
+    const wordValidation = await validateAllWordsFormed(
+      pendingChallenge.placedTiles, 
+      gameState.board
+    );
     
-    console.log('Challenging word:', word);
+    console.log('Challenging words:', wordValidation.invalidWords);
     
-    const isValid = await validateWord(word);
-    
-    if (isValid) {
-      // Valid word - challenger loses their turn, move to next player
+    if (wordValidation.isValid) {
+      // Valid words - challenger loses their turn, move to next player
       await clearPendingChallengeInGame();
       await nextTurn(); // Challenger loses turn, move to next player
       
       toast({
         title: "Challenge failed",
-        description: `The word "${word}" is valid. You lose your turn.`,
+        description: `All words formed are valid in CSW dictionary. You lose your turn.`,
         variant: "destructive"
       });
     } else {
@@ -350,7 +363,7 @@ const Game = () => {
         
         toast({
           title: "Challenge successful",
-          description: `The word "${word}" is invalid. You keep your turn, and the original player's tiles are returned.`
+          description: `Invalid words found: ${wordValidation.invalidWords.join(', ')}. You keep your turn, and the original player's tiles are returned.`
         });
       }
       
