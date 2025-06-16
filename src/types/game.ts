@@ -24,6 +24,9 @@ export interface GamePlayer {
   tiles: Tile[];
   is_connected: boolean;
   joined_at: string;
+  // Add computed properties for compatibility with Player interface
+  name: string;
+  isConnected: boolean;
 }
 
 export interface Game {

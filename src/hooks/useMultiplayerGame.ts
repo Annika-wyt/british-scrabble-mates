@@ -47,7 +47,14 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         .single();
       
       if (error) throw error;
-      return data as Game;
+      
+      // Convert the database data to our Game type with proper type casting
+      return {
+        ...data,
+        board: data.board as (Tile | null)[][],
+        tile_bag: data.tile_bag as Tile[],
+        pending_challenge: data.pending_challenge as PendingChallenge | null
+      } as Game;
     },
     enabled: !!roomCode,
   });
@@ -65,7 +72,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         .order('player_order');
       
       if (error) throw error;
-      return data as GamePlayer[];
+      
+      // Convert database data to GamePlayer type with proper type casting and computed properties
+      return data.map(player => ({
+        ...player,
+        tiles: player.tiles as Tile[],
+        // Add computed properties for compatibility
+        name: player.player_name,
+        isConnected: player.is_connected
+      })) as GamePlayer[];
     },
     enabled: !!game?.id,
   });
@@ -77,15 +92,15 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         id: p.id,
         name: p.player_name,
         score: p.score,
-        tiles: p.tiles as Tile[],
+        tiles: p.tiles,
         isConnected: p.is_connected
       }));
 
       setGameState({
-        board: game.board as (Tile | null)[][],
+        board: game.board,
         players: mappedPlayers,
         currentPlayerIndex: game.current_player_index,
-        tileBag: game.tile_bag as Tile[],
+        tileBag: game.tile_bag,
         gameStarted: game.game_started,
         gameOver: game.game_over,
         chatMessages: []
@@ -347,7 +362,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   const currentPlayer = players?.find(p => p.player_name === playerName);
   const isCurrentTurn = game && currentPlayer && 
     players?.[game.current_player_index]?.player_name === playerName;
-  const pendingChallenge = game?.pending_challenge as PendingChallenge | null;
+  const pendingChallenge = game?.pending_challenge;
   const isReady = !!game && !!players && !!currentPlayer;
 
   return {
