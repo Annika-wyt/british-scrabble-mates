@@ -80,7 +80,7 @@ const GameActions = ({
             </Button>
           )}
 
-          {/* Quit game - always available */}
+          {/* Quit game - always available with margin-left auto to push to right */}
           <Button
             onClick={onQuitGame}
             variant="destructive"
