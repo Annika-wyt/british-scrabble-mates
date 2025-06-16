@@ -129,8 +129,8 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     }
   }, [game, players]);
 
-  // Enhanced current player detection
-  const getCurrentPlayer = useCallback(() => {
+  // Enhanced current player detection - return the full GamePlayer object
+  const getCurrentPlayer = useCallback((): GamePlayer | null => {
     if (!players || !playerName) {
       return null;
     }
@@ -141,21 +141,8 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       foundPlayer = players.find(p => p.name === playerName);
     }
 
-    if (foundPlayer) {
-      // Convert to Player type for consistency
-      const playerResult = {
-        id: foundPlayer.id,
-        name: foundPlayer.player_name,
-        score: foundPlayer.score,
-        tiles: foundPlayer.tiles,
-        isConnected: foundPlayer.is_connected,
-        // Keep original properties for compatibility
-        player_name: foundPlayer.player_name
-      };
-      return playerResult;
-    }
-
-    return null;
+    // Return the complete GamePlayer object
+    return foundPlayer || null;
   }, [players, playerName]);
 
   // Join game function
