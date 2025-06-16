@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -236,7 +235,7 @@ const Game = () => {
       return;
     }
 
-    // Validate word placement (connection and alignment)
+    // Validate word placement (connection and alignment) - but NOT dictionary validity
     const validationResult = validateWordPlacement(placedTiles, gameState.board);
     if (!validationResult.isValid) {
       toast({
@@ -249,18 +248,7 @@ const Game = () => {
 
     console.log('Submitting word with tiles:', placedTiles);
 
-    // Validate all words formed using CSW dictionary
-    const wordValidation = await validateAllWordsFormed(placedTiles, gameState.board);
-    if (!wordValidation.isValid) {
-      toast({
-        title: "Invalid word(s)",
-        description: `The following words are not valid in CSW dictionary: ${wordValidation.invalidWords.join(', ')}`,
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Calculate score for the placed tiles
+    // Calculate score for the placed tiles (no dictionary validation here)
     const score = calculateScore(placedTiles, gameState.board);
     
     if (currentPlayer) {
@@ -303,13 +291,13 @@ const Game = () => {
   const challengeWord = async () => {
     if (!pendingChallenge || !currentPlayer) return;
 
-    // Get all words formed from the pending challenge
+    // NOW we validate the words using the CSW dictionary
     const wordValidation = await validateAllWordsFormed(
       pendingChallenge.placedTiles, 
       gameState.board
     );
     
-    console.log('Challenging words:', wordValidation.invalidWords);
+    console.log('Challenge result - Invalid words:', wordValidation.invalidWords);
     
     if (wordValidation.isValid) {
       // Valid words - challenger loses their turn, move to next player
