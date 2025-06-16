@@ -1,9 +1,8 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Shuffle, Send, RotateCcw, LogOut, AlertTriangle } from "lucide-react";
+import { Shuffle, Send, RotateCcw, LogOut } from "lucide-react";
 import { Tile } from "@/types/game";
-import { useState, useEffect } from "react";
 
 interface GameActionsProps {
   isCurrentTurn: boolean;
@@ -19,36 +18,13 @@ interface GameActionsProps {
 
 const GameActions = ({
   isCurrentTurn,
-  canChallenge,
   playerTiles,
   onShuffleTiles,
   onSubmitWord,
   onRetrieveTiles,
   onQuitGame,
-  onChallenge,
   hasPlacedTiles
 }: GameActionsProps) => {
-  const [challengeDisabled, setChallengeDisabled] = useState(false);
-
-  // Start 20-second timer when challenge becomes available
-  useEffect(() => {
-    if (canChallenge && !challengeDisabled) {
-      setChallengeDisabled(false);
-      const timer = setTimeout(() => {
-        setChallengeDisabled(true);
-      }, 20000); // 20 seconds
-
-      return () => clearTimeout(timer);
-    }
-  }, [canChallenge]);
-
-  // Reset challenge disabled state when challenge period ends
-  useEffect(() => {
-    if (!canChallenge) {
-      setChallengeDisabled(false);
-    }
-  }, [canChallenge]);
-
   return (
     <Card className="mt-4">
       <CardContent className="p-4">
@@ -64,36 +40,25 @@ const GameActions = ({
             Shuffle
           </Button>
 
-          {/* Submit word - disabled when not current turn or when challenge is pending */}
+          {/* Submit word - only enabled on current turn with placed tiles */}
           <Button
             onClick={onSubmitWord}
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-            disabled={!isCurrentTurn || !hasPlacedTiles || canChallenge}
+            disabled={!isCurrentTurn || !hasPlacedTiles}
           >
             <Send className="w-4 h-4" />
             Submit Word
           </Button>
 
-          {/* Retrieve tiles - disabled when not current turn or when challenge is pending */}
+          {/* Retrieve tiles - only enabled on current turn with placed tiles */}
           <Button
             onClick={onRetrieveTiles}
             variant="outline"
             className="flex items-center gap-2"
-            disabled={!isCurrentTurn || !hasPlacedTiles || canChallenge}
+            disabled={!isCurrentTurn || !hasPlacedTiles}
           >
             <RotateCcw className="w-4 h-4" />
             Retrieve Tiles
-          </Button>
-
-          {/* Challenge button - enabled when there's a word to challenge and within 20 seconds */}
-          <Button
-            onClick={onChallenge}
-            variant="destructive"
-            className="flex items-center gap-2"
-            disabled={!canChallenge || challengeDisabled}
-          >
-            <AlertTriangle className="w-4 h-4" />
-            Challenge Word
           </Button>
 
           {/* Quit game - always available with margin-left auto to push to right */}
@@ -109,16 +74,10 @@ const GameActions = ({
 
         {/* Turn indicator */}
         <div className="mt-3 text-sm text-center">
-          {canChallenge ? (
-            challengeDisabled ? (
-              <span className="text-gray-500">Challenge period expired</span>
-            ) : (
-              <span className="text-red-600 font-semibold">Word can be challenged! Click "Challenge Word" if you think it's invalid.</span>
-            )
-          ) : isCurrentTurn ? (
-            <span className="text-green-600 font-semibold">Your Turn</span>
+          {isCurrentTurn ? (
+            <span className="text-green-600 font-semibold">Your Turn - Place tiles and submit your word</span>
           ) : (
-            <span className="text-gray-500">Waiting for other player...</span>
+            <span className="text-gray-500">Waiting for other player to submit their word...</span>
           )}
         </div>
       </CardContent>

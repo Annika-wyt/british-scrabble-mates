@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -10,6 +9,7 @@ import WaitingRoom from "@/components/WaitingRoom";
 import GameInterface from "@/components/GameInterface";
 import GameError from "@/components/GameError";
 import GameLoading from "@/components/GameLoading";
+import BlankTileSelector from "@/components/BlankTileSelector";
 
 const Game = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -19,6 +19,8 @@ const Game = () => {
   const [roomExists, setRoomExists] = useState<boolean | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [isBlankSelectorOpen, setIsBlankSelectorOpen] = useState(false);
+  const [pendingBlankTile, setPendingBlankTile] = useState<Tile | null>(null);
 
   const {
     game,
@@ -38,10 +40,10 @@ const Game = () => {
     updateAnyPlayerScore,
     updateTileBag,
     drawTilesForPlayer,
-    nextTurn,
-    refreshGameState,
     setPendingChallengeInGame,
     clearPendingChallengeInGame,
+    nextTurn,
+    refreshGameState,
   } = useMultiplayerGame(roomCode || "", playerName);
 
   const {
@@ -49,6 +51,7 @@ const Game = () => {
     localBoard,
     handleTilePlacement,
     handleTileDoubleClick,
+    handleBlankTileRedefinition,
     handleShuffleTiles,
     handleSubmitWord,
     handleRetrieveTiles,
@@ -155,7 +158,20 @@ const Game = () => {
   }, [game?.id, game?.game_started, refreshGameState]);
 
   const handleTileSelect = (tile: Tile) => {
-    setSelectedTile(tile);
+    if (tile.isBlank) {
+      setPendingBlankTile(tile);
+      setIsBlankSelectorOpen(true);
+    } else {
+      setSelectedTile(tile);
+    }
+  };
+
+  const handleBlankTileLetterSelect = (letter: string) => {
+    if (pendingBlankTile) {
+      handleBlankTileRedefinition(pendingBlankTile.id, letter);
+    }
+    setPendingBlankTile(null);
+    setIsBlankSelectorOpen(false);
   };
 
   const handleSendMessage = (message: string) => {
@@ -198,10 +214,8 @@ const Game = () => {
   const shouldShowGameInterface = game?.game_started && players.length >= 2 && currentPlayer;
   const shouldShowWaitingRoom = !game?.game_started || players.length < 2;
 
-  // Check if there's a pending challenge that can be acted upon
-  const canChallenge = game?.pending_challenge && 
-    game.pending_challenge.originalPlayerId !== currentPlayer?.id &&
-    !game.pending_challenge.challengerId;
+  // Remove challenge logic - no pending challenges
+  const canChallenge = false;
 
   // Create gameState with local board for current player's view
   const displayGameState = {
@@ -284,25 +298,32 @@ const Game = () => {
 
   if (shouldShowGameInterface) {
     return (
-      <GameInterface
-        roomCode={roomCode}
-        gameState={displayGameState}
-        currentPlayer={currentPlayer}
-        players={players}
-        isCurrentTurn={isCurrentTurn}
-        canChallenge={canChallenge || false}
-        chatMessages={chatMessages}
-        hasPlacedTiles={placedTilesThisTurn.length > 0}
-        onTilePlacement={handleTilePlacement}
-        onTileDoubleClick={handleTileDoubleClick}
-        onTileSelect={handleTileSelect}
-        onSendMessage={handleSendMessage}
-        onShuffleTiles={handleShuffleTiles}
-        onSubmitWord={handleSubmitWord}
-        onRetrieveTiles={handleRetrieveTiles}
-        onQuitGame={handleQuitGame}
-        onChallenge={handleChallenge}
-      />
+      <>
+        <GameInterface
+          roomCode={roomCode}
+          gameState={displayGameState}
+          currentPlayer={currentPlayer}
+          players={players}
+          isCurrentTurn={isCurrentTurn}
+          canChallenge={canChallenge}
+          chatMessages={chatMessages}
+          hasPlacedTiles={placedTilesThisTurn.length > 0}
+          onTilePlacement={handleTilePlacement}
+          onTileDoubleClick={handleTileDoubleClick}
+          onTileSelect={handleTileSelect}
+          onSendMessage={handleSendMessage}
+          onShuffleTiles={handleShuffleTiles}
+          onSubmitWord={handleSubmitWord}
+          onRetrieveTiles={handleRetrieveTiles}
+          onQuitGame={handleQuitGame}
+          onChallenge={handleChallenge}
+        />
+        <BlankTileSelector
+          isOpen={isBlankSelectorOpen}
+          onClose={() => setIsBlankSelectorOpen(false)}
+          onLetterSelect={handleBlankTileLetterSelect}
+        />
+      </>
     );
   }
 

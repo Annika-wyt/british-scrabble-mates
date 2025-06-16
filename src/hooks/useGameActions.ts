@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { Tile } from "@/types/game";
 import { calculateScore } from "@/utils/scoreUtils";
 import { validateAllWordsFormed, validateTilePlacement } from "@/utils/dictionaryUtils";
-import { removePlayerTiles, restoreTilesToBag } from "@/utils/tileManagementUtils";
+import { removePlayerTiles, restoreTilesToBag, resetBlankTiles } from "@/utils/tileManagementUtils";
 import { supabase } from "@/integrations/supabase/client";
 
 interface UseGameActionsProps {
@@ -100,12 +100,17 @@ export const useGameActions = ({
     if (wasPlacedThisTurn && currentPlayer) {
       const tileOnBoard = localBoard[row][col];
       if (tileOnBoard) {
+        // Reset blank tile definition when retrieving
+        const tileToReturn = tileOnBoard.isBlank ? 
+          { ...tileOnBoard, chosenLetter: undefined, letter: '?' } : 
+          tileOnBoard;
+
         // Update local board
         const newBoard = localBoard.map((boardRow: any[]) => [...boardRow]);
         newBoard[row][col] = null;
         setLocalBoard(newBoard);
 
-        const updatedTiles = [...currentPlayer.tiles, tileOnBoard];
+        const updatedTiles = [...currentPlayer.tiles, tileToReturn];
         updatePlayerTiles(updatedTiles);
 
         setPlacedTilesThisTurn(prev => 
@@ -113,6 +118,35 @@ export const useGameActions = ({
         );
       }
     }
+  };
+
+  const handleBlankTileRedefinition = (tileId: string, newLetter: string) => {
+    if (!currentPlayer) return;
+
+    // Update tiles in player's rack
+    const updatedRackTiles = currentPlayer.tiles.map((tile: Tile) => 
+      tile.id === tileId && tile.isBlank ? 
+        { ...tile, chosenLetter: newLetter, letter: newLetter } : 
+        tile
+    );
+    updatePlayerTiles(updatedRackTiles);
+
+    // Update any placed tiles on the board
+    const updatedPlacedTiles = placedTilesThisTurn.map(placed => 
+      placed.tile.id === tileId && placed.tile.isBlank ? 
+        { ...placed, tile: { ...placed.tile, chosenLetter: newLetter, letter: newLetter } } :
+        placed
+    );
+    setPlacedTilesThisTurn(updatedPlacedTiles);
+
+    // Update local board if tile is placed
+    const newBoard = localBoard.map((boardRow: any[]) => [...boardRow]);
+    updatedPlacedTiles.forEach(({ row, col, tile }) => {
+      if (tile.id === tileId && tile.isBlank) {
+        newBoard[row][col] = tile;
+      }
+    });
+    setLocalBoard(newBoard);
   };
 
   const handleShuffleTiles = () => {
@@ -158,7 +192,7 @@ export const useGameActions = ({
       console.log('Score calculated:', score);
       console.log('New total score:', newScore);
 
-      // Now update the actual game board for all players
+      // Update the actual game board for all players
       await updateGameBoard(localBoard);
 
       // Update player score
@@ -168,32 +202,15 @@ export const useGameActions = ({
       const tilesUsed = placedTilesThisTurn.length;
       await drawTilesForPlayer(currentPlayer.id, tilesUsed);
 
-      // Create pending challenge data - store the original tiles and drawn tiles info
-      const pendingChallenge = {
-        originalPlayerId: currentPlayer.id,
-        placedTiles: placedTilesThisTurn,
-        score: score,
-        tilesUsed: tilesUsed // Store how many tiles were drawn
-      };
-
-      // Set pending challenge
-      await setPendingChallengeInGame(pendingChallenge);
-
       // Clear placed tiles tracking
       setPlacedTilesThisTurn([]);
       
-      toast.success(`Word submitted! Score: +${score} points. Drew ${tilesUsed} new tiles. Opponents can challenge within 20 seconds.`);
+      // Advance turn immediately after word submission
+      await nextTurn();
+      
+      toast.success(`Word submitted! Score: +${score} points. Turn advanced to next player.`);
       
       console.log('=== WORD SUBMISSION SUCCESS ===');
-
-      // Auto-advance turn and clear challenge after 20 seconds (only if no challenge is made)
-      setTimeout(async () => {
-        if (game?.pending_challenge?.originalPlayerId === currentPlayer.id) {
-          await clearPendingChallengeInGame();
-          await nextTurn();
-          toast.info('Challenge period expired. Turn advanced.');
-        }
-      }, 20000);
 
     } catch (error) {
       console.error('Error submitting word:', error);
@@ -210,7 +227,11 @@ export const useGameActions = ({
 
     placedTilesThisTurn.forEach(({ row, col, tile }) => {
       newBoard[row][col] = null;
-      tilesToReturn.push(tile);
+      // Reset blank tiles when retrieving
+      const tileToReturn = tile.isBlank ? 
+        { ...tile, chosenLetter: undefined, letter: '?' } : 
+        tile;
+      tilesToReturn.push(tileToReturn);
     });
 
     setLocalBoard(newBoard);
@@ -224,82 +245,17 @@ export const useGameActions = ({
     toast.success('Tiles retrieved successfully!');
   };
 
+  // Remove challenge functionality - keep the function for compatibility but make it do nothing
   const handleChallenge = async () => {
-    if (!game?.pending_challenge || !currentPlayer) return;
-
-    try {
-      console.log('=== CHALLENGE START ===');
-      console.log('Challenger:', currentPlayer.player_name || currentPlayer.name);
-      console.log('Challenge data:', game.pending_challenge);
-
-      const challenge = game.pending_challenge;
-      
-      // Validate the challenged words using CSW dictionary
-      const validation = await validateAllWordsFormed(challenge.placedTiles, gameState.board);
-      
-      console.log('Challenge validation result:', validation);
-      
-      if (validation.isValid) {
-        // Challenge failed - challenger loses turn, advance to next player
-        toast.error(`Challenge failed! All words are valid. You lose your turn.`);
-        
-        // Clear the challenge and advance turn normally
-        await clearPendingChallengeInGame();
-        await nextTurn();
-      } else {
-        // Challenge succeeded - original player loses points and tiles are restored
-        toast.success(`Challenge succeeded! Invalid words: ${validation.invalidWords.join(', ')}`);
-        
-        // Find the original player
-        const originalPlayer = players.find(p => p.id === challenge.originalPlayerId);
-        if (originalPlayer) {
-          // Deduct points
-          const newScore = Math.max(0, originalPlayer.score - challenge.score);
-          await updateAnyPlayerScore(originalPlayer.id, newScore);
-
-          // Restore the placed tiles to the original player's rack
-          const tilesToRestore = challenge.placedTiles.map(pt => pt.tile);
-          const updatedPlayerTiles = [...originalPlayer.tiles, ...tilesToRestore];
-          
-          // Remove the newly drawn tiles from the player's rack (last N tiles)
-          const tilesWithoutNewlyDrawn = updatedPlayerTiles.slice(0, -challenge.tilesUsed);
-          
-          // Update the original player's tiles
-          await supabase
-            .from('game_players')
-            .update({ tiles: tilesWithoutNewlyDrawn as any })
-            .eq('id', originalPlayer.id);
-
-          // Return the newly drawn tiles back to the tile bag
-          const newlyDrawnTiles = updatedPlayerTiles.slice(-challenge.tilesUsed);
-          const restoredTileBag = restoreTilesToBag(newlyDrawnTiles, game.tile_bag);
-          await updateTileBag(restoredTileBag);
-        }
-
-        // Remove the placed tiles from the board
-        const newBoard = gameState.board.map((boardRow: any[]) => [...boardRow]);
-        challenge.placedTiles.forEach(({ row, col }: { row: number; col: number }) => {
-          newBoard[row][col] = null;
-        });
-        await updateGameBoard(newBoard);
-
-        // Clear the challenge and advance turn normally
-        await clearPendingChallengeInGame();
-        await nextTurn();
-      }
-
-      console.log('=== CHALLENGE END ===');
-    } catch (error) {
-      console.error('Error handling challenge:', error);
-      toast.error('Failed to process challenge');
-    }
+    toast.info('Challenge functionality has been disabled. Players take turns submitting words.');
   };
 
   return {
     placedTilesThisTurn,
-    localBoard, // Return local board for display
+    localBoard,
     handleTilePlacement,
     handleTileDoubleClick,
+    handleBlankTileRedefinition,
     handleShuffleTiles,
     handleSubmitWord,
     handleRetrieveTiles,
