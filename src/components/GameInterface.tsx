@@ -60,6 +60,7 @@ const GameInterface = ({
               board={gameState.board}
               onTilePlacement={onTilePlacement}
               onTileDoubleClick={onTileDoubleClick}
+              isCurrentTurn={isCurrentTurn}
             />
             
             <div className="mt-6">

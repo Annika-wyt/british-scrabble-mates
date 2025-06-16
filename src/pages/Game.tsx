@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -46,6 +45,7 @@ const Game = () => {
 
   const {
     placedTilesThisTurn,
+    localBoard,
     handleTilePlacement,
     handleTileDoubleClick,
     handleShuffleTiles,
@@ -201,6 +201,12 @@ const Game = () => {
     game.pending_challenge.originalPlayerId !== currentPlayer?.id &&
     !game.pending_challenge.challengerId;
 
+  // Create gameState with local board for current player's view
+  const displayGameState = {
+    ...gameState,
+    board: localBoard || gameState.board
+  };
+
   if (!roomCode) {
     return (
       <GameError
@@ -278,7 +284,7 @@ const Game = () => {
     return (
       <GameInterface
         roomCode={roomCode}
-        gameState={gameState}
+        gameState={displayGameState}
         currentPlayer={currentPlayer}
         players={players}
         isCurrentTurn={isCurrentTurn}

@@ -8,6 +8,7 @@ interface GameBoardProps {
   board: (Tile | null)[][];
   onTilePlacement: (row: number, col: number, tile: Tile) => void;
   onTileDoubleClick?: (row: number, col: number) => void;
+  isCurrentTurn?: boolean; // Add this prop to control tile placement
 }
 
 const getBoardSquare = (row: number, col: number): BoardSquare => {
@@ -95,7 +96,7 @@ const getSquareLabel = (square: BoardSquare) => {
   }
 };
 
-const GameBoard = ({ board, onTilePlacement, onTileDoubleClick }: GameBoardProps) => {
+const GameBoard = ({ board, onTilePlacement, onTileDoubleClick, isCurrentTurn = true }: GameBoardProps) => {
   const [dragOverSquare, setDragOverSquare] = useState<{row: number, col: number} | null>(null);
   const [pendingBlankTile, setPendingBlankTile] = useState<{
     row: number;
@@ -105,13 +106,17 @@ const GameBoard = ({ board, onTilePlacement, onTileDoubleClick }: GameBoardProps
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!isCurrentTurn) {
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
     e.dataTransfer.dropEffect = 'move';
   };
 
   const handleDragEnter = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault();
-    // Only show drag over effect if the square is empty
-    if (board[row][col] === null) {
+    // Only show drag over effect if it's the player's turn and the square is empty
+    if (isCurrentTurn && board[row][col] === null) {
       setDragOverSquare({ row, col });
     }
   };
@@ -131,6 +136,12 @@ const GameBoard = ({ board, onTilePlacement, onTileDoubleClick }: GameBoardProps
   const handleDrop = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault();
     setDragOverSquare(null);
+    
+    // Prevent tile placement if it's not the player's turn
+    if (!isCurrentTurn) {
+      console.log('Cannot place tile - not your turn');
+      return;
+    }
     
     // Check if square is already occupied
     if (board[row][col] !== null) {
@@ -176,7 +187,8 @@ const GameBoard = ({ board, onTilePlacement, onTileDoubleClick }: GameBoardProps
   };
 
   const handleTileDoubleClick = (row: number, col: number) => {
-    if (onTileDoubleClick) {
+    // Only allow tile retrieval if it's the player's turn
+    if (isCurrentTurn && onTileDoubleClick) {
       onTileDoubleClick(row, col);
     }
   };
@@ -197,7 +209,8 @@ const GameBoard = ({ board, onTilePlacement, onTileDoubleClick }: GameBoardProps
                   "w-8 h-8 sm:w-10 sm:h-10 border flex items-center justify-center text-xs sm:text-sm relative transition-all duration-200",
                   getSquareClasses(square),
                   !isEmpty ? 'bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 text-gray-900' : '',
-                  isDragOver && isEmpty ? 'bg-green-200 border-green-400 scale-105 ring-2 ring-green-300' : '',
+                  isDragOver && isEmpty && isCurrentTurn ? 'bg-green-200 border-green-400 scale-105 ring-2 ring-green-300' : '',
+                  !isCurrentTurn && isEmpty ? 'opacity-75' : '', // Visual indicator for non-turn
                   square.type === 'normal' ? 'border-gray-300' : 'border-white/30'
                 )}
                 onDragOver={handleDragOver}

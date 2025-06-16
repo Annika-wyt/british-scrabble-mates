@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { toast } from "sonner";
 import { Tile } from "@/types/game";
@@ -35,11 +36,18 @@ export const useGameActions = ({
   players
 }: UseGameActionsProps) => {
   const [placedTilesThisTurn, setPlacedTilesThisTurn] = useState<{row: number, col: number, tile: Tile}[]>([]);
+  const [localBoard, setLocalBoard] = useState<(Tile | null)[][]>(() => gameState.board);
+
+  // Update local board when game state changes
+  React.useEffect(() => {
+    setLocalBoard(gameState.board);
+  }, [gameState.board]);
 
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
-    const newBoard = gameState.board.map((boardRow: any[]) => [...boardRow]);
+    // Update local board immediately for UI responsiveness
+    const newBoard = localBoard.map((boardRow: any[]) => [...boardRow]);
     newBoard[row][col] = tile;
-    updateGameBoard(newBoard);
+    setLocalBoard(newBoard);
 
     if (currentPlayer) {
       const updatedTiles = removePlayerTiles(currentPlayer.tiles, [tile]);
@@ -50,18 +58,24 @@ export const useGameActions = ({
   };
 
   const handleTileDoubleClick = (row: number, col: number) => {
-    const tileOnBoard = gameState.board[row][col];
-    if (tileOnBoard && currentPlayer) {
-      const newBoard = gameState.board.map((boardRow: any[]) => [...boardRow]);
-      newBoard[row][col] = null;
-      updateGameBoard(newBoard);
+    // Check if this tile was placed this turn
+    const wasPlacedThisTurn = placedTilesThisTurn.some(placed => placed.row === row && placed.col === col);
+    
+    if (wasPlacedThisTurn && currentPlayer) {
+      const tileOnBoard = localBoard[row][col];
+      if (tileOnBoard) {
+        // Update local board
+        const newBoard = localBoard.map((boardRow: any[]) => [...boardRow]);
+        newBoard[row][col] = null;
+        setLocalBoard(newBoard);
 
-      const updatedTiles = [...currentPlayer.tiles, tileOnBoard];
-      updatePlayerTiles(updatedTiles);
+        const updatedTiles = [...currentPlayer.tiles, tileOnBoard];
+        updatePlayerTiles(updatedTiles);
 
-      setPlacedTilesThisTurn(prev => 
-        prev.filter(placed => !(placed.row === row && placed.col === col))
-      );
+        setPlacedTilesThisTurn(prev => 
+          prev.filter(placed => !(placed.row === row && placed.col === col))
+        );
+      }
     }
   };
 
@@ -84,9 +98,12 @@ export const useGameActions = ({
     }
 
     try {
-      // Calculate score for the move (no validation here)
-      const score = calculateScore(placedTilesThisTurn, gameState.board);
+      // Calculate score for the move
+      const score = calculateScore(placedTilesThisTurn, localBoard);
       const newScore = currentPlayer.score + score;
+
+      // Now update the actual game board for all players
+      await updateGameBoard(localBoard);
 
       // Update player score
       await updatePlayerScore(newScore);
@@ -128,7 +145,8 @@ export const useGameActions = ({
   const handleRetrieveTiles = () => {
     if (placedTilesThisTurn.length === 0) return;
 
-    const newBoard = gameState.board.map((boardRow: any[]) => [...boardRow]);
+    // Update local board
+    const newBoard = localBoard.map((boardRow: any[]) => [...boardRow]);
     const tilesToReturn: Tile[] = [];
 
     placedTilesThisTurn.forEach(({ row, col, tile }) => {
@@ -136,7 +154,7 @@ export const useGameActions = ({
       tilesToReturn.push(tile);
     });
 
-    updateGameBoard(newBoard);
+    setLocalBoard(newBoard);
 
     if (currentPlayer) {
       const updatedTiles = [...currentPlayer.tiles, ...tilesToReturn];
@@ -155,6 +173,8 @@ export const useGameActions = ({
       
       // Validate the challenged words using CSW dictionary
       const validation = await validateAllWordsFormed(challenge.placedTiles, gameState.board);
+      
+      console.log('Challenge validation result:', validation);
       
       if (validation.isValid) {
         // Challenge failed - challenger loses turn, original player keeps their turn
@@ -195,6 +215,7 @@ export const useGameActions = ({
 
   return {
     placedTilesThisTurn,
+    localBoard, // Return local board for display
     handleTilePlacement,
     handleTileDoubleClick,
     handleShuffleTiles,

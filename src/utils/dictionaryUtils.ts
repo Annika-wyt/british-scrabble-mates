@@ -38,7 +38,7 @@ const CSW_WORDS = new Set([
   'ICE', 'JAM', 'KEY', 'LAP', 'MUD', 'NUT', 'OWL', 'PIG', 'RAG', 'SIP', 'TOY', 'URN', 'VET', 'WIG', 'ZIP',
   
   // Common longer words (but be more restrictive for testing)
-  'WORD', 'GAME', 'PLAY', 'TILE', 'HELLO', 'WORLD', 'CHAT',
+  'WORD', 'GAME', 'PLAY', 'TILE', 'HELLO', 'WORLD', 'CHAT', 'LOVE', 'NICE', 'COOL', 'BEST', 'GOOD', 'TIME',
   'HOUSE', 'WATER', 'LIGHT', 'RIGHT', 'PLACE', 'THINK', 'GREAT', 'WHERE', 'BEING', 'EVERY', 'NEVER', 'AFTER',
   'FIRST', 'THING', 'COULD', 'OTHER', 'THOSE', 'THEIR', 'BEFORE', 'THREE', 'SHOULD', 'AGAIN', 'FOUND', 'SMALL',
   'STILL', 'MIGHT', 'YEARS', 'POINT', 'UNDER', 'WHILE', 'STATE', 'PEOPLE',
@@ -71,6 +71,7 @@ export const validateAllWordsFormed = async (
   }
 
   console.log('Validating all words formed from placed tiles:', placedTiles);
+  console.log('Current board state:', board);
 
   // Create temporary board with new tiles
   const tempBoard = board.map(row => [...row]);
@@ -78,11 +79,15 @@ export const validateAllWordsFormed = async (
     tempBoard[row][col] = tile;
   }
 
+  console.log('Board after placing tiles:', tempBoard);
+
   const wordsToValidate = new Set<string>();
   const invalidWords: string[] = [];
 
   // Find all words that include at least one newly placed tile
   for (const { row, col } of placedTiles) {
+    console.log(`Checking words at position (${row}, ${col})`);
+    
     // Check horizontal word
     const horizontalWord = getWordAt(tempBoard, row, col, 'horizontal');
     if (horizontalWord.length > 1) {
@@ -90,6 +95,7 @@ export const validateAllWordsFormed = async (
         const tile = tempBoard[pos.row][pos.col];
         return tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
       }).join('');
+      console.log(`Found horizontal word: ${wordString}`);
       wordsToValidate.add(wordString.toUpperCase());
     }
 
@@ -100,26 +106,29 @@ export const validateAllWordsFormed = async (
         const tile = tempBoard[pos.row][pos.col];
         return tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
       }).join('');
+      console.log(`Found vertical word: ${wordString}`);
       wordsToValidate.add(wordString.toUpperCase());
     }
   }
 
-  console.log('Words to validate:', Array.from(wordsToValidate));
+  console.log('All words to validate:', Array.from(wordsToValidate));
 
   // Validate each word
   for (const word of wordsToValidate) {
     const isValid = await validateWord(word);
+    console.log(`Word "${word}" validation result: ${isValid}`);
     if (!isValid) {
       invalidWords.push(word);
     }
   }
 
-  console.log('Validation result:', { isValid: invalidWords.length === 0, invalidWords });
-
-  return {
+  const result = {
     isValid: invalidWords.length === 0,
     invalidWords
   };
+
+  console.log('Final validation result:', result);
+  return result;
 };
 
 const getWordAt = (
@@ -170,6 +179,7 @@ const getWordAt = (
     }
   }
 
+  console.log(`Word positions for ${direction} at (${row}, ${col}):`, positions);
   return positions;
 };
 
