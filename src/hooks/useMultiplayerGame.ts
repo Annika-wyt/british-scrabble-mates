@@ -74,6 +74,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     },
     enabled: !!roomCode,
     retry: 1,
+    refetchInterval: 3000, // Refetch every 3 seconds as fallback
   });
 
   // Fetch players data
@@ -110,6 +111,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     },
     enabled: !!game?.id,
     retry: 1,
+    refetchInterval: 2000, // Refetch every 2 seconds as fallback
   });
 
   // Handle errors
@@ -196,7 +198,9 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
 
       setIsConnected(true);
       setConnectionError(null);
+      // Force immediate refresh of players data
       queryClient.invalidateQueries({ queryKey: ['players', game.id] });
+      queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
     } catch (error) {
       console.error('Error joining game:', error);
       toast.error('Failed to join game');
@@ -370,13 +374,16 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   }, [game, roomCode, queryClient]);
 
   const refreshGameState = useCallback(async () => {
+    console.log('Refreshing game state...');
     queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
     queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
   }, [queryClient, roomCode, game?.id]);
 
-  // Real-time subscriptions
+  // Enhanced real-time subscriptions with better error handling
   useEffect(() => {
-    if (!game?.id) return;
+    if (!game?.id || !playerName) return;
+
+    console.log('Setting up real-time subscriptions for game:', game.id);
 
     const gameChannel = supabase
       .channel(`game_${game.id}`)
@@ -388,7 +395,8 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           table: 'games',
           filter: `id=eq.${game.id}`,
         },
-        () => {
+        (payload) => {
+          console.log('Real-time game update:', payload);
           queryClient.invalidateQueries({ queryKey: ['game', roomCode] });
         }
       )
@@ -400,16 +408,25 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           table: 'game_players',
           filter: `game_id=eq.${game.id}`,
         },
-        () => {
+        (payload) => {
+          console.log('Real-time players update:', payload);
           queryClient.invalidateQueries({ queryKey: ['players', game.id] });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Real-time subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to real-time updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Real-time subscription error');
+        }
+      });
 
     return () => {
+      console.log('Cleaning up real-time subscriptions');
       supabase.removeChannel(gameChannel);
     };
-  }, [game?.id, roomCode, queryClient]);
+  }, [game?.id, roomCode, queryClient, playerName]);
 
   const currentPlayer = players?.find(p => p.player_name === playerName);
   const isCurrentTurn = game && currentPlayer && 
