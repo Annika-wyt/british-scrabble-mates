@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -60,6 +61,7 @@ const Game = () => {
     updatePlayerTiles,
     updatePlayerScore,
     updateAnyPlayerScore,
+    updateTileBag,
     drawTilesForPlayer,
     setPendingChallengeInGame,
     clearPendingChallengeInGame,
