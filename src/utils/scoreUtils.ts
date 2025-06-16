@@ -1,261 +1,182 @@
 
 import { Tile } from "@/types/game";
 
+// Standard Scrabble tile values
+const TILE_VALUES: { [key: string]: number } = {
+  'A': 1, 'E': 1, 'I': 1, 'O': 1, 'U': 1, 'L': 1, 'N': 1, 'S': 1, 'T': 1, 'R': 1,
+  'D': 2, 'G': 2,
+  'B': 3, 'C': 3, 'M': 3, 'P': 3,
+  'F': 4, 'H': 4, 'V': 4, 'W': 4, 'Y': 4,
+  'K': 5,
+  'J': 8, 'X': 8,
+  'Q': 10, 'Z': 10
+};
+
 export const calculateScore = (
   placedTiles: { row: number; col: number; tile: Tile }[],
   board: (Tile | null)[][]
 ): number => {
   if (placedTiles.length === 0) return 0;
 
+  console.log('Calculating score for placed tiles:', placedTiles);
+  
   let totalScore = 0;
-  let wordMultiplier = 1;
+  const wordsFormed = findAllWordsFormed(placedTiles, board);
   
-  // Calculate main word score
-  const mainWordScore = calculateMainWordScore(placedTiles, board);
-  totalScore += mainWordScore.score;
-  wordMultiplier *= mainWordScore.wordMultiplier;
+  console.log('Words formed:', wordsFormed);
   
-  // Calculate cross word scores (perpendicular words formed)
-  const crossWordScores = calculateCrossWordScores(placedTiles, board);
-  totalScore += crossWordScores;
+  // Score each word formed
+  for (const word of wordsFormed) {
+    const wordScore = calculateWordScore(word, placedTiles, board);
+    console.log(`Word score for positions ${word.map(pos => `(${pos.row},${pos.col})`).join(',')}: ${wordScore}`);
+    totalScore += wordScore;
+  }
   
-  // Apply word multiplier to main word
-  totalScore = (totalScore - mainWordScore.score) + (mainWordScore.score * wordMultiplier);
-  
-  // Bonus for using all 7 tiles (Bingo)
+  // Bingo bonus: 50 points if all 7 tiles used
   if (placedTiles.length === 7) {
+    console.log('Bingo bonus: +50 points');
     totalScore += 50;
   }
   
+  console.log('Total score:', totalScore);
   return totalScore;
 };
 
-const calculateMainWordScore = (
+const findAllWordsFormed = (
   placedTiles: { row: number; col: number; tile: Tile }[],
   board: (Tile | null)[][]
-): { score: number; wordMultiplier: number } => {
-  if (placedTiles.length === 0) return { score: 0, wordMultiplier: 1 };
+): { row: number; col: number }[][] => {
+  const words: { row: number; col: number }[][] = [];
+  const processedWords = new Set<string>();
   
-  // Sort tiles to form the main word
-  const sortedTiles = [...placedTiles].sort((a, b) => {
-    if (a.row === b.row) return a.col - b.col;
-    return a.row - b.row;
-  });
+  // Create a temporary board with new tiles placed
+  const tempBoard = board.map(row => [...row]);
+  for (const { row, col, tile } of placedTiles) {
+    tempBoard[row][col] = tile;
+  }
   
-  const isHorizontal = sortedTiles.every(t => t.row === sortedTiles[0].row);
-  
-  let wordScore = 0;
-  let wordMultiplier = 1;
-  
-  if (isHorizontal) {
-    // Horizontal word
-    const row = sortedTiles[0].row;
-    const startCol = sortedTiles[0].col;
-    const endCol = sortedTiles[sortedTiles.length - 1].col;
-    
-    // Find the actual start of the word (including existing tiles)
-    let actualStartCol = startCol;
-    while (actualStartCol > 0 && board[row][actualStartCol - 1] !== null) {
-      actualStartCol--;
-    }
-    
-    // Find the actual end of the word
-    let actualEndCol = endCol;
-    while (actualEndCol < 14 && board[row][actualEndCol + 1] !== null) {
-      actualEndCol++;
-    }
-    
-    // Calculate score for the entire word
-    for (let col = actualStartCol; col <= actualEndCol; col++) {
-      const tile = board[row][col];
-      const placedTile = placedTiles.find(t => t.row === row && t.col === col);
-      
-      if (tile) {
-        let tileScore = tile.isBlank ? 0 : tile.value;
-        
-        // Apply letter multiplier only if this is a newly placed tile
-        if (placedTile) {
-          const square = getSquareMultiplier(row, col);
-          if (square.type === 'double-letter') {
-            tileScore *= 2;
-          } else if (square.type === 'triple-letter') {
-            tileScore *= 3;
-          } else if (square.type === 'double-word' || square.type === 'center') {
-            wordMultiplier *= 2;
-          } else if (square.type === 'triple-word') {
-            wordMultiplier *= 3;
-          }
-        }
-        
-        wordScore += tileScore;
+  // Check for horizontal and vertical words containing any placed tile
+  for (const { row, col } of placedTiles) {
+    // Check horizontal word
+    const horizontalWord = getWordAt(tempBoard, row, col, 'horizontal');
+    if (horizontalWord.length > 1) {
+      const wordKey = `h-${horizontalWord.map(pos => `${pos.row}-${pos.col}`).join('-')}`;
+      if (!processedWords.has(wordKey)) {
+        words.push(horizontalWord);
+        processedWords.add(wordKey);
       }
     }
-  } else {
-    // Vertical word
-    const col = sortedTiles[0].col;
-    const startRow = sortedTiles[0].row;
-    const endRow = sortedTiles[sortedTiles.length - 1].row;
     
-    // Find the actual start of the word
-    let actualStartRow = startRow;
-    while (actualStartRow > 0 && board[actualStartRow - 1][col] !== null) {
-      actualStartRow--;
-    }
-    
-    // Find the actual end of the word
-    let actualEndRow = endRow;
-    while (actualEndRow < 14 && board[actualEndRow + 1][col] !== null) {
-      actualEndRow++;
-    }
-    
-    // Calculate score for the entire word
-    for (let row = actualStartRow; row <= actualEndRow; row++) {
-      const tile = board[row][col];
-      const placedTile = placedTiles.find(t => t.row === row && t.col === col);
-      
-      if (tile) {
-        let tileScore = tile.isBlank ? 0 : tile.value;
-        
-        // Apply letter multiplier only if this is a newly placed tile
-        if (placedTile) {
-          const square = getSquareMultiplier(row, col);
-          if (square.type === 'double-letter') {
-            tileScore *= 2;
-          } else if (square.type === 'triple-letter') {
-            tileScore *= 3;
-          } else if (square.type === 'double-word' || square.type === 'center') {
-            wordMultiplier *= 2;
-          } else if (square.type === 'triple-word') {
-            wordMultiplier *= 3;
-          }
-        }
-        
-        wordScore += tileScore;
+    // Check vertical word
+    const verticalWord = getWordAt(tempBoard, row, col, 'vertical');
+    if (verticalWord.length > 1) {
+      const wordKey = `v-${verticalWord.map(pos => `${pos.row}-${pos.col}`).join('-')}`;
+      if (!processedWords.has(wordKey)) {
+        words.push(verticalWord);
+        processedWords.add(wordKey);
       }
     }
   }
   
-  return { score: wordScore, wordMultiplier };
+  return words;
 };
 
-const calculateCrossWordScores = (
-  placedTiles: { row: number; col: number; tile: Tile }[],
-  board: (Tile | null)[][]
-): number => {
-  let totalCrossScore = 0;
-  
-  // For each placed tile, check if it forms a cross word (perpendicular to main word)
-  for (const placedTile of placedTiles) {
-    const { row, col, tile } = placedTile;
-    
-    // Check vertical cross word (if main word is horizontal)
-    const verticalCrossScore = calculateCrossWordAt(row, col, tile, board, 'vertical');
-    totalCrossScore += verticalCrossScore;
-    
-    // Check horizontal cross word (if main word is vertical)
-    const horizontalCrossScore = calculateCrossWordAt(row, col, tile, board, 'horizontal');
-    totalCrossScore += horizontalCrossScore;
-  }
-  
-  return totalCrossScore;
-};
-
-const calculateCrossWordAt = (
+const getWordAt = (
+  board: (Tile | null)[][],
   row: number,
   col: number,
-  tile: Tile,
-  board: (Tile | null)[][],
   direction: 'horizontal' | 'vertical'
-): number => {
-  let hasAdjacentTiles = false;
-  let wordScore = 0;
-  let wordMultiplier = 1;
+): { row: number; col: number }[] => {
+  const positions: { row: number; col: number }[] = [];
   
-  if (direction === 'vertical') {
-    // Check if there are tiles above or below
-    const hasAbove = row > 0 && board[row - 1][col] !== null;
-    const hasBelow = row < 14 && board[row + 1][col] !== null;
-    
-    if (!hasAbove && !hasBelow) return 0; // No cross word formed
-    
-    // Find start and end of vertical word
-    let startRow = row;
-    while (startRow > 0 && board[startRow - 1][col] !== null) {
-      startRow--;
-    }
-    
-    let endRow = row;
-    while (endRow < 14 && board[endRow + 1][col] !== null) {
-      endRow++;
-    }
-    
-    // Calculate score for cross word
-    for (let r = startRow; r <= endRow; r++) {
-      const crossTile = r === row ? tile : board[r][col];
-      if (crossTile) {
-        let tileScore = crossTile.isBlank ? 0 : crossTile.value;
-        
-        // Apply multipliers only for the newly placed tile
-        if (r === row) {
-          const square = getSquareMultiplier(row, col);
-          if (square.type === 'double-letter') {
-            tileScore *= 2;
-          } else if (square.type === 'triple-letter') {
-            tileScore *= 3;
-          } else if (square.type === 'double-word' || square.type === 'center') {
-            wordMultiplier *= 2;
-          } else if (square.type === 'triple-word') {
-            wordMultiplier *= 3;
-          }
-        }
-        
-        wordScore += tileScore;
-      }
-    }
-  } else {
-    // Horizontal cross word
-    const hasLeft = col > 0 && board[row][col - 1] !== null;
-    const hasRight = col < 14 && board[row][col + 1] !== null;
-    
-    if (!hasLeft && !hasRight) return 0; // No cross word formed
-    
-    // Find start and end of horizontal word
+  if (direction === 'horizontal') {
+    // Find start of word
     let startCol = col;
     while (startCol > 0 && board[row][startCol - 1] !== null) {
       startCol--;
     }
     
+    // Find end of word
     let endCol = col;
     while (endCol < 14 && board[row][endCol + 1] !== null) {
       endCol++;
     }
     
-    // Calculate score for cross word
+    // Collect all positions in the word
     for (let c = startCol; c <= endCol; c++) {
-      const crossTile = c === col ? tile : board[row][c];
-      if (crossTile) {
-        let tileScore = crossTile.isBlank ? 0 : crossTile.value;
-        
-        // Apply multipliers only for the newly placed tile
-        if (c === col) {
-          const square = getSquareMultiplier(row, col);
-          if (square.type === 'double-letter') {
-            tileScore *= 2;
-          } else if (square.type === 'triple-letter') {
-            tileScore *= 3;
-          } else if (square.type === 'double-word' || square.type === 'center') {
-            wordMultiplier *= 2;
-          } else if (square.type === 'triple-word') {
-            wordMultiplier *= 3;
-          }
-        }
-        
-        wordScore += tileScore;
+      if (board[row][c] !== null) {
+        positions.push({ row, col: c });
+      }
+    }
+  } else {
+    // Find start of word
+    let startRow = row;
+    while (startRow > 0 && board[startRow - 1][col] !== null) {
+      startRow--;
+    }
+    
+    // Find end of word
+    let endRow = row;
+    while (endRow < 14 && board[endRow + 1][col] !== null) {
+      endRow++;
+    }
+    
+    // Collect all positions in the word
+    for (let r = startRow; r <= endRow; r++) {
+      if (board[r][col] !== null) {
+        positions.push({ row: r, col });
       }
     }
   }
   
-  return wordScore * wordMultiplier;
+  return positions;
+};
+
+const calculateWordScore = (
+  wordPositions: { row: number; col: number }[],
+  placedTiles: { row: number; col: number; tile: Tile }[],
+  board: (Tile | null)[][]
+): number => {
+  let wordScore = 0;
+  let wordMultiplier = 1;
+  
+  for (const { row, col } of wordPositions) {
+    // Get the tile at this position
+    const placedTile = placedTiles.find(t => t.row === row && t.col === col);
+    const tile = placedTile ? placedTile.tile : board[row][col];
+    
+    if (!tile) continue;
+    
+    // Get base tile value
+    let tileValue = tile.isBlank ? 0 : TILE_VALUES[tile.letter.toUpperCase()] || 0;
+    
+    // Apply letter multipliers only for newly placed tiles
+    if (placedTile) {
+      const square = getSquareMultiplier(row, col);
+      
+      if (square.type === 'double-letter') {
+        tileValue *= 2;
+        console.log(`Applied double letter bonus at (${row},${col}): ${tile.letter} = ${tileValue}`);
+      } else if (square.type === 'triple-letter') {
+        tileValue *= 3;
+        console.log(`Applied triple letter bonus at (${row},${col}): ${tile.letter} = ${tileValue}`);
+      } else if (square.type === 'double-word' || square.type === 'center') {
+        wordMultiplier *= 2;
+        console.log(`Applied double word bonus at (${row},${col})`);
+      } else if (square.type === 'triple-word') {
+        wordMultiplier *= 3;
+        console.log(`Applied triple word bonus at (${row},${col})`);
+      }
+    }
+    
+    wordScore += tileValue;
+  }
+  
+  // Apply word multiplier
+  const finalScore = wordScore * wordMultiplier;
+  console.log(`Word score calculation: base=${wordScore}, multiplier=${wordMultiplier}, final=${finalScore}`);
+  
+  return finalScore;
 };
 
 export const getSquareMultiplier = (row: number, col: number): { type: string; multiplier: number } => {
