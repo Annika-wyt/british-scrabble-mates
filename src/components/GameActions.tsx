@@ -31,18 +31,6 @@ const GameActions = ({
     <Card className="mt-4">
       <CardContent className="p-4">
         <div className="flex flex-wrap gap-2">
-          {/* Challenge button - only show when there's a word to challenge */}
-          {canChallenge && (
-            <Button
-              onClick={onChallenge}
-              variant="destructive"
-              className="flex items-center gap-2"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              Challenge Word
-            </Button>
-          )}
-
           {/* Actions available during your turn */}
           {isCurrentTurn && (
             <>
@@ -78,6 +66,18 @@ const GameActions = ({
                 Retrieve Tiles
               </Button>
             </>
+          )}
+
+          {/* Challenge button - show when there's a word to challenge */}
+          {canChallenge && (
+            <Button
+              onClick={onChallenge}
+              variant="destructive"
+              className="flex items-center gap-2"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              Challenge Word
+            </Button>
           )}
 
           {/* Quit game - always available */}

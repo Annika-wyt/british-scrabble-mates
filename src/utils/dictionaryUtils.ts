@@ -70,16 +70,18 @@ export const validateAllWordsFormed = async (
     return { isValid: true, invalidWords: [] };
   }
 
-  console.log('Validating all words formed from placed tiles:', placedTiles);
-  console.log('Current board state:', board);
+  console.log('=== WORD VALIDATION START ===');
+  console.log('Placed tiles:', placedTiles.map(pt => ({ 
+    row: pt.row, 
+    col: pt.col, 
+    letter: pt.tile?.isBlank && pt.tile?.chosenLetter ? pt.tile.chosenLetter : pt.tile?.letter 
+  })));
 
   // Create temporary board with new tiles
   const tempBoard = board.map(row => [...row]);
   for (const { row, col, tile } of placedTiles) {
     tempBoard[row][col] = tile;
   }
-
-  console.log('Board after placing tiles:', tempBoard);
 
   const wordsToValidate = new Set<string>();
   const invalidWords: string[] = [];
@@ -96,7 +98,9 @@ export const validateAllWordsFormed = async (
         return tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
       }).join('');
       console.log(`Found horizontal word: ${wordString}`);
-      wordsToValidate.add(wordString.toUpperCase());
+      if (wordString.length > 0) {
+        wordsToValidate.add(wordString.toUpperCase());
+      }
     }
 
     // Check vertical word  
@@ -107,7 +111,9 @@ export const validateAllWordsFormed = async (
         return tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
       }).join('');
       console.log(`Found vertical word: ${wordString}`);
-      wordsToValidate.add(wordString.toUpperCase());
+      if (wordString.length > 0) {
+        wordsToValidate.add(wordString.toUpperCase());
+      }
     }
   }
 
@@ -115,10 +121,12 @@ export const validateAllWordsFormed = async (
 
   // Validate each word
   for (const word of wordsToValidate) {
-    const isValid = await validateWord(word);
-    console.log(`Word "${word}" validation result: ${isValid}`);
-    if (!isValid) {
-      invalidWords.push(word);
+    if (word && word.length > 0) {
+      const isValid = await validateWord(word);
+      console.log(`Word "${word}" validation result: ${isValid}`);
+      if (!isValid) {
+        invalidWords.push(word);
+      }
     }
   }
 
@@ -127,6 +135,7 @@ export const validateAllWordsFormed = async (
     invalidWords
   };
 
+  console.log('=== WORD VALIDATION END ===');
   console.log('Final validation result:', result);
   return result;
 };

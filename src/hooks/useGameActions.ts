@@ -1,8 +1,9 @@
+
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { Tile } from "@/types/game";
 import { calculateScore } from "@/utils/scoreUtils";
-import { validateAllWordsFormed } from "@/utils/dictionaryUtils";
+import { validateAllWordsFormed, validateTilePlacement } from "@/utils/dictionaryUtils";
 import { removePlayerTiles } from "@/utils/tileManagementUtils";
 
 interface UseGameActionsProps {
@@ -97,9 +98,23 @@ export const useGameActions = ({
     }
 
     try {
+      console.log('=== WORD SUBMISSION START ===');
+      console.log('Player submitting:', currentPlayer.player_name || currentPlayer.name);
+      console.log('Placed tiles:', placedTilesThisTurn);
+
+      // Validate tile placement (straight line, no gaps)
+      const placementValidation = validateTilePlacement(placedTilesThisTurn);
+      if (!placementValidation.isValid) {
+        toast.error(placementValidation.error || 'Invalid tile placement');
+        return;
+      }
+
       // Calculate score for the move
       const score = calculateScore(placedTilesThisTurn, localBoard);
       const newScore = currentPlayer.score + score;
+
+      console.log('Score calculated:', score);
+      console.log('New total score:', newScore);
 
       // Now update the actual game board for all players
       await updateGameBoard(localBoard);
@@ -126,6 +141,8 @@ export const useGameActions = ({
       
       toast.success(`Word submitted! Score: +${score} points. Drew ${tilesUsed} new tiles. Opponents can challenge within 30 seconds.`);
       
+      console.log('=== WORD SUBMISSION SUCCESS ===');
+
       // Auto-advance turn after challenge period (30 seconds)
       setTimeout(async () => {
         if (game?.pending_challenge?.originalPlayerId === currentPlayer.id) {
@@ -168,6 +185,10 @@ export const useGameActions = ({
     if (!game?.pending_challenge || !currentPlayer) return;
 
     try {
+      console.log('=== CHALLENGE START ===');
+      console.log('Challenger:', currentPlayer.player_name || currentPlayer.name);
+      console.log('Challenge data:', game.pending_challenge);
+
       const challenge = game.pending_challenge;
       
       // Validate the challenged words using CSW dictionary
@@ -206,6 +227,8 @@ export const useGameActions = ({
         await clearPendingChallengeInGame();
         await nextTurn();
       }
+
+      console.log('=== CHALLENGE END ===');
     } catch (error) {
       console.error('Error handling challenge:', error);
       toast.error('Failed to process challenge');
