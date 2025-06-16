@@ -1,10 +1,11 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Users, ArrowLeft } from "lucide-react";
+import { Loader2, Users, ArrowLeft, Crown } from "lucide-react";
 import { toast } from "sonner";
 import GameBoard from "@/components/GameBoard";
 import GameSidebar from "@/components/GameSidebar";
@@ -123,6 +124,18 @@ const Game = () => {
     }
   }, [roomExists, playerName, isConnected, isLoading, joinGame]);
 
+  // Refresh player count periodically to ensure accurate count
+  useEffect(() => {
+    if (game?.id && !game.game_started) {
+      const interval = setInterval(() => {
+        console.log('Refreshing player count...');
+        refreshGameState();
+      }, 3000);
+
+      return () => clearInterval(interval);
+    }
+  }, [game?.id, game?.game_started, refreshGameState]);
+
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
     // Create a copy of the current board
     const newBoard = gameState.board.map(boardRow => [...boardRow]);
@@ -149,6 +162,19 @@ const Game = () => {
     };
     setChatMessages(prev => [...prev, newMessage]);
   };
+
+  const handleStartGame = async () => {
+    if (players.length < 2) {
+      toast.error('Need at least 2 players to start the game');
+      return;
+    }
+    console.log('Starting game with', players.length, 'players');
+    await startGame();
+  };
+
+  // Check if current player is the room creator (first player to join)
+  const isRoomCreator = currentPlayer && players.length > 0 && 
+    players.sort((a, b) => a.player_order - b.player_order)[0]?.id === currentPlayer.id;
 
   if (!roomCode) {
     return (
@@ -270,41 +296,75 @@ const Game = () => {
   if (!isReady) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <Card className="max-w-md w-full">
+        <Card className="max-w-lg w-full">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Waiting Room
+              Waiting Room - {roomCode}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-600 mb-4">
-              Welcome to room <span className="font-mono font-bold">{roomCode}</span>!
-            </p>
-            <p className="text-sm text-gray-500 mb-4">
-              Waiting for other players to join...
-            </p>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Players in room:</p>
-              <ul className="text-sm text-gray-600">
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-lg font-semibold text-gray-800 mb-2">
+                  Players in Room ({players.length})
+                </p>
+                <p className="text-sm text-gray-500">
+                  Waiting for players to join...
+                </p>
+              </div>
+              
+              <div className="space-y-3">
                 {players.map((player, index) => (
-                  <li key={player.id} className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${player.isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
-                    {player.name} {player.name === playerName && '(You)'}
-                  </li>
+                  <div key={player.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                    <div className="flex items-center gap-3">
+                      {index === 0 && <Crown className="w-4 h-4 text-yellow-500" title="Room Creator" />}
+                      <span className={`w-3 h-3 rounded-full ${player.isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      <span className="font-medium text-gray-800">
+                        {player.name} 
+                        {player.name === playerName && ' (You)'}
+                        {index === 0 && ' (Creator)'}
+                      </span>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {player.isConnected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
                 ))}
-              </ul>
-            </div>
-            {players.length >= 2 && !game?.game_started && (
-              <Button onClick={startGame} className="w-full mt-4">
-                Start Game
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="text-sm text-blue-800">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="w-4 h-4" />
+                    <span className="font-medium">Room Status</span>
+                  </div>
+                  <p>
+                    {players.length < 2 
+                      ? `Need ${2 - players.length} more player${2 - players.length === 1 ? '' : 's'} to start` 
+                      : 'Ready to start! Waiting for room creator to begin.'}
+                  </p>
+                </div>
+              </div>
+
+              {isRoomCreator && players.length >= 2 && !game?.game_started && (
+                <Button onClick={handleStartGame} className="w-full bg-green-600 hover:bg-green-700">
+                  <Crown className="w-4 h-4 mr-2" />
+                  Start Game
+                </Button>
+              )}
+              
+              {!isRoomCreator && players.length >= 2 && (
+                <div className="text-center text-sm text-gray-500">
+                  Waiting for room creator to start the game...
+                </div>
+              )}
+
+              <Button onClick={() => navigate("/")} variant="outline" className="w-full">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Leave Room
               </Button>
-            )}
-            {players.length < 2 && (
-              <p className="text-sm text-gray-500 mt-4">
-                Need at least 2 players to start the game.
-              </p>
-            )}
+            </div>
           </CardContent>
         </Card>
       </div>
