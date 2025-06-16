@@ -318,7 +318,7 @@ const Game = () => {
                 {players.map((player, index) => (
                   <div key={player.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
                     <div className="flex items-center gap-3">
-                      {index === 0 && <Crown className="w-4 h-4 text-yellow-500" title="Room Creator" />}
+                      {index === 0 && <Crown className="w-4 h-4 text-yellow-500" />}
                       <span className={`w-3 h-3 rounded-full ${player.isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
                       <span className="font-medium text-gray-800">
                         {player.name} 
