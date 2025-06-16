@@ -415,15 +415,7 @@ const Game = () => {
     }
 
     try {
-      // Validate all words formed
-      const validation = await validateAllWordsFormed(placedTilesThisTurn, gameState.board);
-      
-      if (!validation.isValid) {
-        toast.error(`Invalid words: ${validation.invalidWords.join(', ')}`);
-        return;
-      }
-
-      // Calculate score for the move
+      // Calculate score for the move (no validation here)
       const score = calculateScore(placedTilesThisTurn, gameState.board);
       const newScore = currentPlayer.score + score;
 
@@ -492,7 +484,7 @@ const Game = () => {
     try {
       const challenge = game.pending_challenge;
       
-      // Validate the challenged words
+      // Validate the challenged words using CSW dictionary
       const validation = await validateAllWordsFormed(challenge.placedTiles, gameState.board);
       
       if (validation.isValid) {
