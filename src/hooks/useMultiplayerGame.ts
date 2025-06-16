@@ -20,27 +20,6 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   });
   const queryClient = useQueryClient();
 
-  // Set player context for RLS - only if we have a player name
-  useEffect(() => {
-    const setPlayerContext = async () => {
-      if (playerName) {
-        try {
-          const { error } = await supabase.rpc('set_player_context', { 
-            player_name: playerName 
-          });
-          if (error) {
-            console.error('Error setting player context:', error);
-          } else {
-            console.log('Player context set successfully for:', playerName);
-          }
-        } catch (error) {
-          console.error('Failed to set player context:', error);
-        }
-      }
-    };
-    setPlayerContext();
-  }, [playerName]);
-
   // Fetch game data
   const { data: game, isLoading: gameLoading, error: gameError } = useQuery({
     queryKey: ['game', roomCode],
