@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -200,9 +199,64 @@ const Game = () => {
     await startGame();
   };
 
-  // Check if current player is the room creator (first player to join)
-  const isRoomCreator = currentPlayer && players.length > 0 && 
-    players.sort((a, b) => a.player_order - b.player_order)[0]?.id === currentPlayer.id;
+  // Enhanced isRoomCreator calculation with comprehensive debug logging
+  const getRoomCreatorInfo = () => {
+    console.log('=== ROOM CREATOR CALCULATION DEBUG ===');
+    console.log('Current player:', currentPlayer);
+    console.log('Players array:', players);
+    console.log('Players length:', players.length);
+    
+    if (!currentPlayer) {
+      console.log('❌ No current player found');
+      return { isRoomCreator: false, reason: 'No current player' };
+    }
+    
+    if (!players || players.length === 0) {
+      console.log('❌ No players array or empty players');
+      return { isRoomCreator: false, reason: 'No players' };
+    }
+
+    // Sort players by player_order to find the first player
+    const sortedPlayers = [...players].sort((a, b) => a.player_order - b.player_order);
+    console.log('Sorted players by order:', sortedPlayers.map(p => ({ 
+      id: p.id, 
+      name: p.player_name || p.name, 
+      order: p.player_order 
+    })));
+    
+    const firstPlayer = sortedPlayers[0];
+    console.log('First player (room creator):', {
+      id: firstPlayer?.id,
+      name: firstPlayer?.player_name || firstPlayer?.name,
+      order: firstPlayer?.player_order
+    });
+    
+    // Check multiple ways to match current player
+    const currentPlayerIdMatch = firstPlayer?.id === currentPlayer.id;
+    const currentPlayerNameMatch = (firstPlayer?.player_name || firstPlayer?.name) === 
+                                  (currentPlayer.player_name || currentPlayer.name || playerName);
+    
+    console.log('Current player ID match:', currentPlayerIdMatch);
+    console.log('Current player name match:', currentPlayerNameMatch);
+    console.log('Current player data for comparison:', {
+      id: currentPlayer.id,
+      name: currentPlayer.player_name || currentPlayer.name,
+      storedPlayerName: playerName
+    });
+    
+    const isRoomCreator = currentPlayerIdMatch || currentPlayerNameMatch;
+    console.log('✅ Final isRoomCreator result:', isRoomCreator);
+    console.log('=== END ROOM CREATOR DEBUG ===');
+    
+    return { 
+      isRoomCreator, 
+      reason: isRoomCreator ? 'Is room creator' : 'Not room creator',
+      matchMethod: currentPlayerIdMatch ? 'ID match' : currentPlayerNameMatch ? 'Name match' : 'No match'
+    };
+  };
+
+  const roomCreatorInfo = getRoomCreatorInfo();
+  const isRoomCreator = roomCreatorInfo.isRoomCreator;
 
   if (!roomCode) {
     return (
@@ -350,7 +404,7 @@ const Game = () => {
                       <span className={`w-3 h-3 rounded-full ${player.isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
                       <span className="font-medium text-gray-800">
                         {player.name} 
-                        {player.name === playerName && ' (You)'}
+                        {(player.name === playerName || player.player_name === playerName) && ' (You)'}
                         {index === 0 && ' (Creator)'}
                       </span>
                     </div>
@@ -361,17 +415,23 @@ const Game = () => {
                 ))}
               </div>
 
+              {/* Room Creator Debug Info */}
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="text-sm text-blue-800">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-4 h-4" />
                     <span className="font-medium">Room Status</span>
                   </div>
-                  <p>
+                  <p className="mb-2">
                     {players.length < 2 
                       ? `Need ${2 - players.length} more player${2 - players.length === 1 ? '' : 's'} to start` 
                       : 'Ready to start! Waiting for room creator to begin.'}
                   </p>
+                  <div className="text-xs bg-blue-100 p-2 rounded mt-2">
+                    <p><strong>Debug:</strong> Room Creator = {isRoomCreator ? 'YES' : 'NO'}</p>
+                    <p><strong>Reason:</strong> {roomCreatorInfo.reason}</p>
+                    {roomCreatorInfo.matchMethod && <p><strong>Match Method:</strong> {roomCreatorInfo.matchMethod}</p>}
+                  </div>
                 </div>
               </div>
 
@@ -474,7 +534,8 @@ const Game = () => {
     gameStarted: game?.game_started,
     currentPlayer: currentPlayer,
     isReady: isReady,
-    placedTilesCount: placedTilesThisTurn.length
+    placedTilesCount: placedTilesThisTurn.length,
+    isRoomCreator: isRoomCreator
   });
 
   // Main game interface
@@ -510,6 +571,7 @@ const Game = () => {
               <p>Current Player: {currentPlayer ? 'Yes' : 'No'}</p>
               <p>Is Ready: {isReady ? 'Yes' : 'No'}</p>
               <p>Placed Tiles: {placedTilesThisTurn.length}</p>
+              <p>Is Room Creator: {isRoomCreator ? 'Yes' : 'No'}</p>
             </div>
 
             {/* Game Actions - Always show when game started */}

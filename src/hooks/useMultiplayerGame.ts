@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -78,6 +77,12 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       }
       
       console.log('Players fetched successfully:', data);
+      console.log('Players debug - raw data:', data.map(p => ({
+        id: p.id,
+        player_name: p.player_name,
+        player_order: p.player_order,
+        is_connected: p.is_connected
+      })));
       
       // Convert database data to GamePlayer type with proper type casting and computed properties
       return data.map(player => ({
@@ -104,6 +109,12 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   // Update gameState when data changes
   useEffect(() => {
     if (game && players) {
+      console.log('Updating game state with players:', players.map(p => ({
+        id: p.id,
+        name: p.player_name,
+        order: p.player_order
+      })));
+
       const mappedPlayers: Player[] = players.map(p => ({
         id: p.id,
         name: p.player_name,
@@ -123,6 +134,56 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
       });
     }
   }, [game, players]);
+
+  // Enhanced current player detection with debug logging
+  const getCurrentPlayer = useCallback(() => {
+    console.log('=== CURRENT PLAYER DETECTION DEBUG ===');
+    console.log('PlayerName from prop:', playerName);
+    console.log('Players array:', players?.map(p => ({
+      id: p.id,
+      player_name: p.player_name,
+      name: p.name || p.player_name,
+      order: p.player_order
+    })));
+
+    if (!players || !playerName) {
+      console.log('❌ No players or playerName');
+      return null;
+    }
+
+    // Try to find by player_name first, then by name
+    let foundPlayer = players.find(p => p.player_name === playerName);
+    if (!foundPlayer) {
+      foundPlayer = players.find(p => p.name === playerName);
+    }
+
+    console.log('Found player:', foundPlayer ? {
+      id: foundPlayer.id,
+      player_name: foundPlayer.player_name,
+      name: foundPlayer.name,
+      order: foundPlayer.player_order
+    } : 'NOT FOUND');
+
+    if (foundPlayer) {
+      // Convert to Player type for consistency
+      const playerResult = {
+        id: foundPlayer.id,
+        name: foundPlayer.player_name,
+        score: foundPlayer.score,
+        tiles: foundPlayer.tiles,
+        isConnected: foundPlayer.is_connected,
+        // Keep original properties for compatibility
+        player_name: foundPlayer.player_name
+      };
+      console.log('✅ Returning current player:', playerResult);
+      console.log('=== END CURRENT PLAYER DEBUG ===');
+      return playerResult;
+    }
+
+    console.log('❌ No current player found');
+    console.log('=== END CURRENT PLAYER DEBUG ===');
+    return null;
+  }, [players, playerName]);
 
   // Join game function
   const joinGame = useCallback(async () => {
@@ -253,7 +314,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   }, [game, roomCode, queryClient]);
 
   const updatePlayerTiles = useCallback(async (newTiles: Tile[]) => {
-    const currentPlayer = players?.find(p => p.player_name === playerName);
+    const currentPlayer = getCurrentPlayer();
     if (!currentPlayer) return;
     
     const { error } = await supabase
@@ -267,10 +328,10 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     }
     
     queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
-  }, [players, playerName, game?.id, queryClient]);
+  }, [getCurrentPlayer, game?.id, queryClient]);
 
   const updatePlayerScore = useCallback(async (newScore: number) => {
-    const currentPlayer = players?.find(p => p.player_name === playerName);
+    const currentPlayer = getCurrentPlayer();
     if (!currentPlayer) return;
     
     const { error } = await supabase
@@ -284,7 +345,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     }
     
     queryClient.invalidateQueries({ queryKey: ['players', game?.id] });
-  }, [players, playerName, game?.id, queryClient]);
+  }, [getCurrentPlayer, game?.id, queryClient]);
 
   const updateTileBag = useCallback(async (newTileBag: Tile[]) => {
     if (!game) return;
@@ -407,9 +468,10 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     };
   }, [game?.id, roomCode, queryClient, playerName]);
 
-  const currentPlayer = players?.find(p => p.player_name === playerName);
+  // Use the enhanced getCurrentPlayer function
+  const currentPlayer = getCurrentPlayer();
   const isCurrentTurn = game && currentPlayer && 
-    players?.[game.current_player_index]?.player_name === playerName;
+    players?.[game.current_player_index]?.player_name === (currentPlayer.player_name || currentPlayer.name);
   const pendingChallenge = game?.pending_challenge;
   const isReady = !!game && !!players && !!currentPlayer;
 
