@@ -136,7 +136,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      set_player_context: {
+        Args: { player_name: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

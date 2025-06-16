@@ -51,6 +51,23 @@ const Game = () => {
     connectionError
   } = useMultiplayerGame(roomCode || "", playerName);
 
+  // Helper function to set player context for direct database operations
+  const setPlayerContext = async () => {
+    if (!playerName) return;
+    
+    try {
+      const { error } = await supabase.rpc('set_player_context', {
+        player_name: playerName
+      });
+      
+      if (error) {
+        console.error('Error setting player context:', error);
+      }
+    } catch (error) {
+      console.error('Failed to set player context:', error);
+    }
+  };
+
   // Update local board when game state changes, but preserve local changes for current player
   useEffect(() => {
     if (!isMyTurn()) {
@@ -376,7 +393,9 @@ const Game = () => {
           
           const finalPlayerTiles = [...updatedPlayerTiles, ...tilesToReturn];
           
-          // Update the original player's tiles and score directly via Supabase
+          // Set player context and update the original player's tiles and score directly via Supabase
+          await setPlayerContext();
+          
           console.log('Updating original player tiles and score via database');
           const { error: tilesError } = await supabase
             .from('game_players')
