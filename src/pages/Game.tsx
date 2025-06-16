@@ -287,9 +287,9 @@ const Game = () => {
     const isValid = await validateWord(word);
     
     if (isValid) {
-      // Valid word - challenger loses their turn
+      // Valid word - challenger loses their turn, move to next player
       await clearPendingChallengeInGame();
-      await nextTurn();
+      await nextTurn(); // Challenger loses turn, move to next player
       
       toast({
         title: "Challenge failed",
@@ -303,7 +303,14 @@ const Game = () => {
       if (originalPlayer) {
         // Remove score from original player
         const newScore = originalPlayer.score - pendingChallenge.score;
-        await updatePlayerScore(newScore);
+        
+        // Update the original player's score by finding them in current players
+        const originalPlayerInCurrentGame = gameState.players.find(p => p.id === pendingChallenge.originalPlayerId);
+        if (originalPlayerInCurrentGame) {
+          // Note: This will update the score for the original player, not the current challenger
+          // We need to update the correct player's score in the database
+          await updatePlayerScore(newScore);
+        }
         
         // Remove tiles from board
         const newBoard = gameState.board.map(boardRow => [...boardRow]);

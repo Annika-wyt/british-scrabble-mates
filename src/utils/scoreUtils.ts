@@ -20,14 +20,20 @@ export const calculateScore = (
 
   console.log('Calculating score for placed tiles:', placedTiles);
   
+  // Create a temporary board with the new tiles placed
+  const tempBoard = board.map(row => [...row]);
+  for (const { row, col, tile } of placedTiles) {
+    tempBoard[row][col] = tile;
+  }
+  
   let totalScore = 0;
-  const wordsFormed = findAllWordsFormed(placedTiles, board);
+  const wordsFormed = findAllWordsFormed(placedTiles, tempBoard);
   
   console.log('Words formed:', wordsFormed);
   
   // Score each word formed
   for (const word of wordsFormed) {
-    const wordScore = calculateWordScore(word, placedTiles, board);
+    const wordScore = calculateWordScore(word, placedTiles, tempBoard);
     console.log(`Word score for positions ${word.map(pos => `(${pos.row},${pos.col})`).join(',')}: ${wordScore}`);
     totalScore += wordScore;
   }
@@ -49,16 +55,10 @@ const findAllWordsFormed = (
   const words: { row: number; col: number }[][] = [];
   const processedWords = new Set<string>();
   
-  // Create a temporary board with new tiles placed
-  const tempBoard = board.map(row => [...row]);
-  for (const { row, col, tile } of placedTiles) {
-    tempBoard[row][col] = tile;
-  }
-  
   // Check for horizontal and vertical words containing any placed tile
   for (const { row, col } of placedTiles) {
     // Check horizontal word
-    const horizontalWord = getWordAt(tempBoard, row, col, 'horizontal');
+    const horizontalWord = getWordAt(board, row, col, 'horizontal');
     if (horizontalWord.length > 1) {
       const wordKey = `h-${horizontalWord.map(pos => `${pos.row}-${pos.col}`).join('-')}`;
       if (!processedWords.has(wordKey)) {
@@ -68,7 +68,7 @@ const findAllWordsFormed = (
     }
     
     // Check vertical word
-    const verticalWord = getWordAt(tempBoard, row, col, 'vertical');
+    const verticalWord = getWordAt(board, row, col, 'vertical');
     if (verticalWord.length > 1) {
       const wordKey = `v-${verticalWord.map(pos => `${pos.row}-${pos.col}`).join('-')}`;
       if (!processedWords.has(wordKey)) {
@@ -140,29 +140,40 @@ const calculateWordScore = (
   let wordScore = 0;
   let wordMultiplier = 1;
   
-  // Check if this is the very first move of the game
-  const isFirstMoveOfGame = board.flat().every(cell => cell === null);
+  // Check if this is the very first move of the game (original board has no tiles)
+  const originalBoard = board.map(row => [...row]);
+  // Remove the newly placed tiles to check if the original board was empty
+  for (const { row, col } of placedTiles) {
+    originalBoard[row][col] = null;
+  }
+  const isFirstMoveOfGame = originalBoard.flat().every(cell => cell === null);
+  
+  console.log('Calculating word score for positions:', wordPositions);
+  console.log('Placed tiles in this turn:', placedTiles);
   
   for (const { row, col } of wordPositions) {
     // Get the tile at this position
-    const placedTile = placedTiles.find(t => t.row === row && t.col === col);
-    const tile = placedTile ? placedTile.tile : board[row][col];
-    
+    const tile = board[row][col];
     if (!tile) continue;
+    
+    // Check if this tile was placed in the current turn
+    const isNewlyPlaced = placedTiles.some(pt => pt.row === row && pt.col === col);
     
     // Get base tile value
     let tileValue = tile.isBlank ? 0 : TILE_VALUES[tile.letter.toUpperCase()] || 0;
     
+    console.log(`Tile at (${row},${col}): ${tile.letter}, value: ${tileValue}, newly placed: ${isNewlyPlaced}`);
+    
     // Apply letter multipliers only for newly placed tiles
-    if (placedTile) {
+    if (isNewlyPlaced) {
       const square = getSquareMultiplier(row, col);
       
       if (square.type === 'double-letter') {
         tileValue *= 2;
-        console.log(`Applied double letter bonus at (${row},${col}): ${tile.letter} = ${tileValue}`);
+        console.log(`Applied double letter bonus at (${row},${col}): ${tile.letter} value ${tileValue/2} -> ${tileValue}`);
       } else if (square.type === 'triple-letter') {
         tileValue *= 3;
-        console.log(`Applied triple letter bonus at (${row},${col}): ${tile.letter} = ${tileValue}`);
+        console.log(`Applied triple letter bonus at (${row},${col}): ${tile.letter} value ${tileValue/3} -> ${tileValue}`);
       } else if (square.type === 'double-word') {
         wordMultiplier *= 2;
         console.log(`Applied double word bonus at (${row},${col})`);
@@ -177,6 +188,7 @@ const calculateWordScore = (
     }
     
     wordScore += tileValue;
+    console.log(`Running word score after tile ${tile.letter}: ${wordScore}`);
   }
   
   // Apply word multiplier
