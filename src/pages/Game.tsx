@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
@@ -176,27 +175,48 @@ const Game = () => {
       return;
     }
 
+    if (placedTiles.length === 0) {
+      toast({
+        title: "No tiles to recall",
+        description: "You haven't placed any tiles yet.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     console.log('Recalling tiles:', placedTiles);
     
-    // Process each placed tile
-    for (const { row, col, tile } of placedTiles) {
-      // Remove from board
-      const newBoard = gameState.board.map(boardRow => [...boardRow]);
-      newBoard[row][col] = null;
-      await updateGameBoard(newBoard);
-      
-      // Return to player's rack
-      await handleTileReturn(tile);
-    }
+    // Store the tiles to recall before clearing the state
+    const tilesToRecall = [...placedTiles];
     
+    // Clear placed tiles immediately to prevent issues with real-time updates
     setPlacedTiles([]);
     
-    // Refresh game state
+    // Create a new board with all placed tiles removed
+    const newBoard = gameState.board.map(boardRow => [...boardRow]);
+    
+    // Remove all placed tiles from the board
+    for (const { row, col } of tilesToRecall) {
+      newBoard[row][col] = null;
+    }
+    
+    // Update the board once with all tiles removed
+    await updateGameBoard(newBoard);
+    
+    // Return all tiles to player's rack in one batch
+    if (currentPlayer) {
+      const tilesToReturn = tilesToRecall.map(({ tile }) => tile);
+      const updatedTiles = [...currentPlayer.tiles, ...tilesToReturn];
+      console.log('Returning tiles to rack:', tilesToReturn.map(t => t.letter).join(', '));
+      await updatePlayerTiles(updatedTiles);
+    }
+    
+    // Refresh game state once at the end
     await refreshGameState();
     
     toast({
       title: "Tiles recalled",
-      description: "All placed tiles have been returned to your rack."
+      description: `All ${tilesToRecall.length} placed tiles have been returned to your rack.`
     });
   };
 
