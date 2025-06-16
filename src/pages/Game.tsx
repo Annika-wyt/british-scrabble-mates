@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -10,6 +9,7 @@ import { toast } from "sonner";
 import GameBoard from "@/components/GameBoard";
 import GameSidebar from "@/components/GameSidebar";
 import GameHeader from "@/components/GameHeader";
+import { ChatMessage, Tile } from "@/types/game";
 
 const Game = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -17,6 +17,7 @@ const Game = () => {
   const [playerName, setPlayerName] = useState("");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [roomExists, setRoomExists] = useState<boolean | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const {
     game,
@@ -121,6 +122,33 @@ const Game = () => {
       joinGame();
     }
   }, [roomExists, playerName, isConnected, isLoading, joinGame]);
+
+  const handleTilePlacement = (row: number, col: number, tile: Tile) => {
+    // Create a copy of the current board
+    const newBoard = gameState.board.map(boardRow => [...boardRow]);
+    newBoard[row][col] = tile;
+    updateGameBoard(newBoard);
+  };
+
+  const handleTileDoubleClick = (row: number, col: number) => {
+    // Remove tile from board if it exists
+    if (gameState.board[row][col]) {
+      const newBoard = gameState.board.map(boardRow => [...boardRow]);
+      newBoard[row][col] = null;
+      updateGameBoard(newBoard);
+    }
+  };
+
+  const handleSendMessage = (message: string) => {
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      playerId: currentPlayer?.id || "",
+      playerName: currentPlayer?.name || playerName,
+      message,
+      timestamp: Date.now()
+    };
+    setChatMessages(prev => [...prev, newMessage]);
+  };
 
   if (!roomCode) {
     return (
@@ -288,39 +316,22 @@ const Game = () => {
     <div className="min-h-screen bg-gray-100">
       <GameHeader
         roomCode={roomCode}
-        players={gameState.players}
-        currentPlayerIndex={gameState.currentPlayerIndex}
-        isCurrentTurn={isCurrentTurn}
-        onLeave={() => navigate("/")}
+        currentPlayer={currentPlayer || { id: "", name: playerName, score: 0, tiles: [], isConnected: true }}
       />
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <div className="lg:col-span-3">
             <GameBoard
               board={gameState.board}
-              onBoardUpdate={updateGameBoard}
-              currentPlayer={currentPlayer}
-              isCurrentTurn={isCurrentTurn}
-              tileBag={gameState.tileBag}
-              onTileBagUpdate={updateTileBag}
-              onPlayerTilesUpdate={updatePlayerTiles}
-              onPlayerScoreUpdate={updatePlayerScore}
-              onNextTurn={nextTurn}
-              onRefreshGameState={refreshGameState}
-              pendingChallenge={game?.pending_challenge}
-              onSetPendingChallenge={setPendingChallengeInGame}
-              onClearPendingChallenge={clearPendingChallengeInGame}
+              onTilePlacement={handleTilePlacement}
+              onTileDoubleClick={handleTileDoubleClick}
             />
           </div>
           <div className="lg:col-span-1">
             <GameSidebar
               players={gameState.players}
-              currentPlayerIndex={gameState.currentPlayerIndex}
-              currentPlayer={currentPlayer}
-              isCurrentTurn={isCurrentTurn}
-              gameStarted={gameState.gameStarted}
-              gameOver={gameState.gameOver}
-              onStartGame={startGame}
+              chatMessages={chatMessages}
+              onSendMessage={handleSendMessage}
             />
           </div>
         </div>
