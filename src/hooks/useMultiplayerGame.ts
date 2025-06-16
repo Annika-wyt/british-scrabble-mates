@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -32,7 +31,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         .from('games')
         .select('*')
         .eq('room_code', roomCode)
-        .single();
+        .maybeSingle();
 
       let game: DbGame;
 
@@ -65,7 +64,7 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
         .select('*')
         .eq('game_id', game.id)
         .eq('player_name', playerName)
-        .single();
+        .maybeSingle();
 
       let player: DbPlayer;
 
