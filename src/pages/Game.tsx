@@ -19,21 +19,18 @@ const Game = () => {
 
   const [playerName, setPlayerName] = useState<string>("");
   const [placedTiles, setPlacedTiles] = useState<{row: number, col: number, tile: Tile}[]>([]);
-  const [pendingChallenge, setPendingChallenge] = useState<{
-    challengerId: string;
-    originalPlayerId: string;
-    placedTiles: {row: number, col: number, tile: Tile}[];
-    score: number;
-  } | null>(null);
 
   const {
     gameState,
     currentPlayer,
+    pendingChallenge,
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
     nextTurn,
     refreshGameState,
+    setPendingChallengeInGame,
+    clearPendingChallengeInGame,
     isReady,
     isLoading,
     connectionError
@@ -136,9 +133,8 @@ const Game = () => {
       const newScore = currentPlayer.score + score;
       await updatePlayerScore(newScore);
       
-      // Set up pending challenge state for other players
-      setPendingChallenge({
-        challengerId: "",
+      // Set up pending challenge state in database for all players
+      await setPendingChallengeInGame({
         originalPlayerId: currentPlayer.id,
         placedTiles: [...placedTiles],
         score
@@ -170,7 +166,7 @@ const Game = () => {
     
     if (isValid) {
       // Valid word - challenger loses their turn
-      setPendingChallenge(null);
+      await clearPendingChallengeInGame();
       await nextTurn();
       
       toast({
@@ -203,7 +199,7 @@ const Game = () => {
         });
       }
       
-      setPendingChallenge(null);
+      await clearPendingChallengeInGame();
       await nextTurn();
     }
     

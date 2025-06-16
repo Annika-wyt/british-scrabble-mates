@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +24,12 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [pendingChallenge, setPendingChallenge] = useState<{
+    challengerId: string;
+    originalPlayerId: string;
+    placedTiles: {row: number, col: number, tile: Tile}[];
+    score: number;
+  } | null>(null);
   const { toast } = useToast();
   
   // Use refs to avoid dependency issues in useEffect
@@ -35,6 +40,27 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     gameIdRef.current = gameId;
     playerIdRef.current = playerId;
   }, [gameId, playerId]);
+
+  // Add room validation function
+  const validateRoomCode = useCallback(async (roomCode: string): Promise<boolean> => {
+    try {
+      const { data: existingGame, error } = await supabase
+        .from('games')
+        .select('id')
+        .eq('room_code', roomCode)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error validating room code:', error);
+        return false;
+      }
+
+      return !!existingGame;
+    } catch (error) {
+      console.error('Error validating room code:', error);
+      return false;
+    }
+  }, []);
 
   const createOrJoinGame = useCallback(async () => {
     console.log('Starting createOrJoinGame with:', { roomCode, playerName });
@@ -250,6 +276,13 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
           chatMessages: []
         });
 
+        // Set pending challenge from database
+        if (game.pending_challenge) {
+          setPendingChallenge(game.pending_challenge as any);
+        } else {
+          setPendingChallenge(null);
+        }
+
         // Set current player
         if (currentPlayerId) {
           const currentP = gameStatePlayers.find(p => p.id === currentPlayerId);
@@ -420,14 +453,65 @@ export const useMultiplayerGame = (roomCode: string, playerName: string) => {
     }
   }, [roomCode, playerName, createOrJoinGame, isLoading, gameId]);
 
+  // Add challenge functions
+  const setPendingChallengeInGame = useCallback(async (challengeData: {
+    originalPlayerId: string;
+    placedTiles: {row: number, col: number, tile: Tile}[];
+    score: number;
+  }) => {
+    if (!gameIdRef.current) return;
+
+    try {
+      const { error } = await supabase
+        .from('games')
+        .update({ 
+          pending_challenge: challengeData as any,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', gameIdRef.current);
+
+      if (error) {
+        console.error('Error setting pending challenge:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error setting pending challenge:', error);
+    }
+  }, []);
+
+  const clearPendingChallengeInGame = useCallback(async () => {
+    if (!gameIdRef.current) return;
+
+    try {
+      const { error } = await supabase
+        .from('games')
+        .update({ 
+          pending_challenge: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', gameIdRef.current);
+
+      if (error) {
+        console.error('Error clearing pending challenge:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error clearing pending challenge:', error);
+    }
+  }, []);
+
   return {
     gameState,
     currentPlayer,
+    pendingChallenge,
     updateGameBoard,
     updatePlayerTiles,
     updatePlayerScore,
     nextTurn,
     refreshGameState,
+    validateRoomCode,
+    setPendingChallengeInGame,
+    clearPendingChallengeInGame,
     isReady: !!gameId && !!playerId && !isLoading,
     isLoading,
     connectionError
