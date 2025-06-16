@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -13,6 +12,7 @@ import GameHeader from "@/components/GameHeader";
 import PlayerRack from "@/components/PlayerRack";
 import { ChatMessage, Tile } from "@/types/game";
 import { drawNewTiles, removePlayerTiles } from "@/utils/tileManagementUtils";
+import GameActions from "@/components/GameActions";
 
 const Game = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -22,6 +22,7 @@ const Game = () => {
   const [roomExists, setRoomExists] = useState<boolean | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
+  const [placedTilesThisTurn, setPlacedTilesThisTurn] = useState<{row: number, col: number, tile: Tile}[]>([]);
 
   const {
     game,
@@ -150,6 +151,9 @@ const Game = () => {
       const updatedTiles = removePlayerTiles(currentPlayer.tiles, [tile]);
       updatePlayerTiles(updatedTiles);
     }
+
+    // Track placed tiles for this turn
+    setPlacedTilesThisTurn(prev => [...prev, { row, col, tile }]);
   };
 
   const handleTileDoubleClick = (row: number, col: number) => {
@@ -163,6 +167,11 @@ const Game = () => {
       // Add the tile back to player's tiles
       const updatedTiles = [...currentPlayer.tiles, tileOnBoard];
       updatePlayerTiles(updatedTiles);
+
+      // Remove from placed tiles tracking
+      setPlacedTilesThisTurn(prev => 
+        prev.filter(placed => !(placed.row === row && placed.col === col))
+      );
     }
   };
 
@@ -389,6 +398,75 @@ const Game = () => {
     );
   }
 
+  const handleShuffleTiles = () => {
+    if (!currentPlayer) return;
+    
+    // Shuffle the tiles array
+    const shuffledTiles = [...currentPlayer.tiles];
+    for (let i = shuffledTiles.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledTiles[i], shuffledTiles[j]] = [shuffledTiles[j], shuffledTiles[i]];
+    }
+    
+    updatePlayerTiles(shuffledTiles);
+  };
+
+  const handleSubmitWord = async () => {
+    if (!currentPlayer || placedTilesThisTurn.length === 0) {
+      toast.error('No tiles placed to submit');
+      return;
+    }
+
+    try {
+      // TODO: Implement word validation and scoring
+      console.log('Submitting word with placed tiles:', placedTilesThisTurn);
+      
+      // For now, just advance to next turn and clear placed tiles
+      await nextTurn();
+      setPlacedTilesThisTurn([]);
+      
+      toast.success('Word submitted successfully!');
+    } catch (error) {
+      console.error('Error submitting word:', error);
+      toast.error('Failed to submit word');
+    }
+  };
+
+  const handleRetrieveTiles = () => {
+    if (placedTilesThisTurn.length === 0) return;
+
+    // Remove all placed tiles from board and return to player
+    const newBoard = gameState.board.map(boardRow => [...boardRow]);
+    const tilesToReturn: Tile[] = [];
+
+    placedTilesThisTurn.forEach(({ row, col, tile }) => {
+      newBoard[row][col] = null;
+      tilesToReturn.push(tile);
+    });
+
+    updateGameBoard(newBoard);
+
+    if (currentPlayer) {
+      const updatedTiles = [...currentPlayer.tiles, ...tilesToReturn];
+      updatePlayerTiles(updatedTiles);
+    }
+
+    setPlacedTilesThisTurn([]);
+    toast.success('Tiles retrieved successfully!');
+  };
+
+  const handleChallenge = () => {
+    // TODO: Implement challenge functionality
+    console.log('Challenge initiated');
+    toast.info('Challenge feature coming soon!');
+  };
+
+  const handleQuitGame = () => {
+    if (window.confirm('Are you sure you want to quit the game?')) {
+      navigate('/');
+    }
+  };
+
   // Main game interface
   return (
     <div className="min-h-screen bg-gray-100">
@@ -413,6 +491,21 @@ const Game = () => {
                   onTileSelect={handleTileSelect}
                 />
               </div>
+            )}
+
+            {/* Game Actions */}
+            {game?.game_started && currentPlayer && (
+              <GameActions
+                isCurrentTurn={isCurrentTurn}
+                canChallenge={false} // TODO: Implement proper challenge detection
+                playerTiles={currentPlayer.tiles || []}
+                onShuffleTiles={handleShuffleTiles}
+                onSubmitWord={handleSubmitWord}
+                onRetrieveTiles={handleRetrieveTiles}
+                onQuitGame={handleQuitGame}
+                onChallenge={handleChallenge}
+                hasPlacedTiles={placedTilesThisTurn.length > 0}
+              />
             )}
           </div>
           <div className="lg:col-span-1">

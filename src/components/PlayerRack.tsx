@@ -19,7 +19,8 @@ const PlayerRack = ({ tiles, onTileSelect, onTileDrag }: PlayerRackProps) => {
 
   return (
     <div className="flex justify-center">
-      <div className="bg-gray-100 p-4 rounded-xl border border-gray-200">
+      <div className="bg-gray-100 p-4 rounded-xl border border-gray-200 shadow-lg">
+        <h3 className="text-lg font-semibold text-gray-800 mb-3 text-center">Your Tiles</h3>
         <div className="flex gap-2">
           {tiles.map((tile, index) => (
             <div
@@ -33,7 +34,7 @@ const PlayerRack = ({ tiles, onTileSelect, onTileDrag }: PlayerRackProps) => {
                 "flex flex-col items-center justify-center",
                 "cursor-grab active:cursor-grabbing",
                 "hover:scale-105 hover:shadow-md transition-all duration-200",
-                "text-gray-900 font-bold"
+                "text-gray-900 font-bold select-none"
               )}
             >
               <span className="text-lg sm:text-xl">
@@ -52,6 +53,9 @@ const PlayerRack = ({ tiles, onTileSelect, onTileDrag }: PlayerRackProps) => {
               className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-50 border-2 border-gray-200 rounded-lg opacity-50"
             />
           ))}
+        </div>
+        <div className="text-xs text-gray-500 text-center mt-2">
+          Click to select • Drag to place on board
         </div>
       </div>
     </div>
