@@ -41,7 +41,7 @@ const RoomValidator = ({ playerName, onJoinGame }: RoomValidatorProps) => {
       // Check if room exists
       const { data: existingGame, error } = await supabase
         .from('games')
-        .select('id')
+        .select('id, room_code')
         .eq('room_code', roomCode.toUpperCase())
         .maybeSingle();
 
@@ -59,7 +59,7 @@ const RoomValidator = ({ playerName, onJoinGame }: RoomValidatorProps) => {
       if (!existingGame) {
         toast({
           title: "Room not found",
-          description: "The room code you entered does not exist. Please check and try again.",
+          description: `Room "${roomCode.toUpperCase()}" does not exist. Please check the room code and try again.`,
           variant: "destructive"
         });
         setIsValidating(false);
@@ -67,6 +67,7 @@ const RoomValidator = ({ playerName, onJoinGame }: RoomValidatorProps) => {
       }
 
       // Room exists, proceed to join
+      console.log('Room found:', existingGame.room_code);
       onJoinGame(roomCode.toUpperCase());
     } catch (error) {
       console.error('Error validating room:', error);
@@ -75,9 +76,8 @@ const RoomValidator = ({ playerName, onJoinGame }: RoomValidatorProps) => {
         description: "Failed to validate room code. Please try again.",
         variant: "destructive"
       });
+      setIsValidating(false);
     }
-
-    setIsValidating(false);
   };
 
   return (

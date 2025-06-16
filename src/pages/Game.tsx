@@ -1,10 +1,10 @@
-
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameBoard from "@/components/GameBoard";
 import PlayerRack from "@/components/PlayerRack";
 import GameHeader from "@/components/GameHeader";
 import GameSidebar from "@/components/GameSidebar";
+import BlankTileSelector from "@/components/BlankTileSelector";
 import { useToast } from "@/hooks/use-toast";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
 import { Tile, PendingChallenge } from "@/types/game";
@@ -22,6 +22,15 @@ const Game = () => {
 
   const [playerName, setPlayerName] = useState<string>("");
   const [placedTiles, setPlacedTiles] = useState<{row: number, col: number, tile: Tile}[]>([]);
+  const [blankTileSelector, setBlankTileSelector] = useState<{
+    isOpen: boolean;
+    tileId: string | null;
+    position: { row: number; col: number } | null;
+  }>({
+    isOpen: false,
+    tileId: null,
+    position: null
+  });
 
   const {
     gameState,
@@ -74,6 +83,16 @@ const Game = () => {
       return;
     }
 
+    // Check if this is a blank tile
+    if (tile.isBlank && !tile.chosenLetter) {
+      setBlankTileSelector({
+        isOpen: true,
+        tileId: tile.id,
+        position: { row, col }
+      });
+      return;
+    }
+
     console.log('Placing tile:', { row, col, tile: tile.letter, tileId: tile.id });
 
     // Add to placed tiles for tracking
@@ -96,6 +115,82 @@ const Game = () => {
 
     // Refresh game state to ensure UI is updated
     await refreshGameState();
+  };
+
+  const handleBlankTileLetterSelect = async (letter: string) => {
+    if (!blankTileSelector.tileId || !blankTileSelector.position || !currentPlayer) {
+      setBlankTileSelector({ isOpen: false, tileId: null, position: null });
+      return;
+    }
+
+    const { row, col } = blankTileSelector.position;
+    
+    // Find the tile in player's rack
+    const tileIndex = currentPlayer.tiles.findIndex(t => t.id === blankTileSelector.tileId);
+    if (tileIndex === -1) {
+      setBlankTileSelector({ isOpen: false, tileId: null, position: null });
+      return;
+    }
+
+    // Create updated tile with chosen letter
+    const updatedTile = {
+      ...currentPlayer.tiles[tileIndex],
+      chosenLetter: letter,
+      letter: letter // Display the chosen letter
+    };
+
+    // Place the tile
+    const newPlacedTiles = [...placedTiles, { row, col, tile: updatedTile }];
+    setPlacedTiles(newPlacedTiles);
+
+    // Update board
+    const newBoard = gameState.board.map(boardRow => [...boardRow]);
+    newBoard[row][col] = updatedTile;
+    await updateGameBoard(newBoard);
+
+    // Remove tile from player's rack
+    const updatedPlayerTiles = currentPlayer.tiles.filter(t => t.id !== blankTileSelector.tileId);
+    await updatePlayerTiles(updatedPlayerTiles);
+
+    // Close selector and refresh
+    setBlankTileSelector({ isOpen: false, tileId: null, position: null });
+    await refreshGameState();
+  };
+
+  // Allow players to redefine blank tiles before submitting
+  const handleTileDoubleClick = (row: number, col: number) => {
+    if (!isMyTurn()) return;
+
+    // Check if this tile was placed in current turn and is a blank tile
+    const placedTile = placedTiles.find(pt => pt.row === row && pt.col === col);
+    if (placedTile && placedTile.tile.isBlank) {
+      // Remove from board and placed tiles, return to rack for redefinition
+      const newBoard = gameState.board.map(boardRow => [...boardRow]);
+      newBoard[row][col] = null;
+      updateGameBoard(newBoard);
+
+      const newPlacedTiles = placedTiles.filter(pt => !(pt.row === row && pt.col === col));
+      setPlacedTiles(newPlacedTiles);
+
+      // Reset the tile and return to rack
+      const originalTile = {
+        ...placedTile.tile,
+        chosenLetter: undefined,
+        letter: '?'
+      };
+
+      if (currentPlayer) {
+        const updatedTiles = [...currentPlayer.tiles, originalTile];
+        updatePlayerTiles(updatedTiles);
+      }
+
+      refreshGameState();
+      
+      toast({
+        title: "Blank tile recalled",
+        description: "You can now redefine this blank tile."
+      });
+    }
   };
 
   const handleTileReturn = async (tile: Tile) => {
@@ -202,7 +297,7 @@ const Game = () => {
         variant: "destructive"
       });
     } else {
-      // Invalid word - remove word and original player loses turn
+      // Invalid word - challenger keeps their turn, original player loses score and tiles
       const originalPlayer = gameState.players.find(p => p.id === pendingChallenge.originalPlayerId);
       
       if (originalPlayer) {
@@ -236,12 +331,12 @@ const Game = () => {
         
         toast({
           title: "Challenge successful",
-          description: `The word "${word}" is invalid. The original player loses their turn and new tiles are returned.`
+          description: `The word "${word}" is invalid. You keep your turn, and the original player's tiles are returned.`
         });
       }
       
       await clearPendingChallengeInGame();
-      await nextTurn();
+      // Challenger keeps their turn - no nextTurn() call
     }
     
     await refreshGameState();
@@ -408,6 +503,7 @@ const Game = () => {
               <GameBoard
                 board={gameState.board}
                 onTilePlacement={handleTilePlacement}
+                onTileDoubleClick={handleTileDoubleClick}
               />
             </div>
             
@@ -467,6 +563,12 @@ const Game = () => {
           </div>
         </div>
       </div>
+
+      <BlankTileSelector
+        isOpen={blankTileSelector.isOpen}
+        onClose={() => setBlankTileSelector({ isOpen: false, tileId: null, position: null })}
+        onLetterSelect={handleBlankTileLetterSelect}
+      />
     </div>
   );
 };

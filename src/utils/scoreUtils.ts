@@ -140,6 +140,9 @@ const calculateWordScore = (
   let wordScore = 0;
   let wordMultiplier = 1;
   
+  // Check if this is the very first move of the game
+  const isFirstMoveOfGame = board.flat().every(cell => cell === null);
+  
   for (const { row, col } of wordPositions) {
     // Get the tile at this position
     const placedTile = placedTiles.find(t => t.row === row && t.col === col);
@@ -160,12 +163,16 @@ const calculateWordScore = (
       } else if (square.type === 'triple-letter') {
         tileValue *= 3;
         console.log(`Applied triple letter bonus at (${row},${col}): ${tile.letter} = ${tileValue}`);
-      } else if (square.type === 'double-word' || square.type === 'center') {
+      } else if (square.type === 'double-word') {
         wordMultiplier *= 2;
         console.log(`Applied double word bonus at (${row},${col})`);
       } else if (square.type === 'triple-word') {
         wordMultiplier *= 3;
         console.log(`Applied triple word bonus at (${row},${col})`);
+      } else if (square.type === 'center' && isFirstMoveOfGame) {
+        // Only apply center square bonus for the very first move of the game
+        wordMultiplier *= 2;
+        console.log(`Applied center square bonus at (${row},${col}) for first move`);
       }
     }
     
