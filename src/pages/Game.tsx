@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMultiplayerGame } from "@/hooks/useMultiplayerGame";
@@ -214,8 +215,12 @@ const Game = () => {
   const shouldShowGameInterface = game?.game_started && players.length >= 2 && currentPlayer;
   const shouldShowWaitingRoom = !game?.game_started || players.length < 2;
 
-  // Remove challenge logic - no pending challenges
-  const canChallenge = false;
+  // Determine if the current player can challenge
+  const canChallenge = !!(
+    game?.pending_challenge && 
+    !isCurrentTurn && 
+    currentPlayer?.id !== game.pending_challenge.originalPlayerId
+  );
 
   // Create gameState with local board for current player's view
   const displayGameState = {

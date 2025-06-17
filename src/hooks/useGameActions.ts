@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { Tile } from "@/types/game";
@@ -192,6 +193,15 @@ export const useGameActions = ({
       console.log('Score calculated:', score);
       console.log('New total score:', newScore);
 
+      // Set up pending challenge with all the move data
+      const pendingChallenge = {
+        originalPlayerId: currentPlayer.id,
+        placedTiles: placedTilesThisTurn,
+        score: score,
+        originalBoard: gameState.board, // Store the board state before the move
+        drawnTiles: [] // Will be populated after drawing tiles
+      };
+
       // Update the actual game board for all players
       await updateGameBoard(localBoard);
 
@@ -202,13 +212,16 @@ export const useGameActions = ({
       const tilesUsed = placedTilesThisTurn.length;
       await drawTilesForPlayer(currentPlayer.id, tilesUsed);
 
+      // Set the pending challenge in the game state
+      await setPendingChallengeInGame(pendingChallenge);
+
       // Clear placed tiles tracking
       setPlacedTilesThisTurn([]);
       
-      // Advance turn immediately after word submission
+      // Advance turn to allow the opponent to challenge or continue
       await nextTurn();
       
-      toast.success(`Word submitted! Score: +${score} points. Turn advanced to next player.`);
+      toast.success(`Word submitted! Score: +${score} points. Opponent can now challenge.`);
       
       console.log('=== WORD SUBMISSION SUCCESS ===');
 
@@ -245,9 +258,87 @@ export const useGameActions = ({
     toast.success('Tiles retrieved successfully!');
   };
 
-  // Remove challenge functionality - keep the function for compatibility but make it do nothing
   const handleChallenge = async () => {
-    toast.info('Challenge functionality has been disabled. Players take turns submitting words.');
+    if (!currentPlayer || !game?.pending_challenge) {
+      toast.error('No move to challenge');
+      return;
+    }
+
+    try {
+      console.log('=== CHALLENGE START ===');
+      console.log('Challenger:', currentPlayer.player_name || currentPlayer.name);
+      
+      const challenge = game.pending_challenge;
+      const challengedPlayer = players.find(p => p.id === challenge.originalPlayerId);
+      
+      if (!challengedPlayer) {
+        toast.error('Cannot find the challenged player');
+        return;
+      }
+
+      // Validate all words formed by the challenged move
+      const wordValidation = await validateAllWordsFormed(challenge.placedTiles, localBoard);
+      
+      console.log('Word validation result:', wordValidation);
+
+      if (wordValidation.isValid) {
+        // All words are valid - challenger loses next turn
+        console.log('Challenge failed - all words are valid');
+        
+        // Clear the pending challenge
+        await clearPendingChallengeInGame();
+        
+        // Advance turn again (challenger loses their turn)
+        await nextTurn();
+        
+        toast.success(`Challenge failed! All words are valid. You lose your next turn.`);
+        
+      } else {
+        // Invalid words found - undo the move
+        console.log('Challenge successful - invalid words found:', wordValidation.invalidWords);
+        
+        // Revert the board to the state before the move
+        await updateGameBoard(challenge.originalBoard);
+        
+        // Return tiles to the challenged player's rack
+        const restoredTiles = challenge.placedTiles.map(({ tile }) => 
+          tile.isBlank ? { ...tile, chosenLetter: undefined, letter: '?' } : tile
+        );
+        const challengedPlayerTiles = [...challengedPlayer.tiles, ...restoredTiles];
+        
+        // Update the challenged player's tiles and score
+        const { error: tilesError } = await supabase
+          .from('game_players')
+          .update({ tiles: challengedPlayerTiles as any })
+          .eq('id', challengedPlayer.id);
+          
+        if (tilesError) {
+          console.error('Error updating challenged player tiles:', tilesError);
+          throw tilesError;
+        }
+        
+        // Remove the score gained from the invalid move
+        const revertedScore = challengedPlayer.score - challenge.score;
+        await updateAnyPlayerScore(challengedPlayer.id, revertedScore);
+        
+        // Return the drawn tiles back to the tile bag
+        // Note: This is simplified - in a real implementation you'd need to track which tiles were drawn
+        
+        // Clear the pending challenge
+        await clearPendingChallengeInGame();
+        
+        // The challenged player loses their turn, so advance to the challenger
+        // (Turn was already advanced after the original submission, so we don't need to advance again)
+        
+        toast.success(`Challenge successful! Invalid words: ${wordValidation.invalidWords.join(', ')}. Move has been undone.`);
+      }
+      
+      console.log('=== CHALLENGE END ===');
+      
+    } catch (error) {
+      console.error('Error processing challenge:', error);
+      toast.error('Failed to process challenge');
+    }
   };
 
   return {

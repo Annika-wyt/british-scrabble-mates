@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Shuffle, Send, RotateCcw, LogOut } from "lucide-react";
+import { Shuffle, Send, RotateCcw, LogOut, AlertTriangle } from "lucide-react";
 import { Tile } from "@/types/game";
 
 interface GameActionsProps {
@@ -18,11 +18,13 @@ interface GameActionsProps {
 
 const GameActions = ({
   isCurrentTurn,
+  canChallenge,
   playerTiles,
   onShuffleTiles,
   onSubmitWord,
   onRetrieveTiles,
   onQuitGame,
+  onChallenge,
   hasPlacedTiles
 }: GameActionsProps) => {
   return (
@@ -61,6 +63,17 @@ const GameActions = ({
             Retrieve Tiles
           </Button>
 
+          {/* Challenge button - only enabled when not current turn and can challenge */}
+          <Button
+            onClick={onChallenge}
+            variant="destructive"
+            className="flex items-center gap-2"
+            disabled={isCurrentTurn || !canChallenge}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Challenge
+          </Button>
+
           {/* Quit game - always available with margin-left auto to push to right */}
           <Button
             onClick={onQuitGame}
@@ -76,6 +89,8 @@ const GameActions = ({
         <div className="mt-3 text-sm text-center">
           {isCurrentTurn ? (
             <span className="text-green-600 font-semibold">Your Turn - Place tiles and submit your word</span>
+          ) : canChallenge ? (
+            <span className="text-orange-600 font-semibold">Opponent just played - You can challenge their words</span>
           ) : (
             <span className="text-gray-500">Waiting for other player to submit their word...</span>
           )}
