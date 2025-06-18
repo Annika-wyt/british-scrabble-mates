@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { Tile } from "@/types/game";
@@ -52,13 +51,15 @@ export const useGameActions = ({
     console.log('Placed tiles:', placedTiles);
     console.log('Current board state:', currentBoard);
     
-    // If this is the first move in the game, it must include the center square (7,7)
+    // Check if this is the first move in the game by seeing if the center square is empty
     const isCenterSquareEmpty = currentBoard[7][7] === null;
     console.log('Is center square empty?', isCenterSquareEmpty);
     
     if (isCenterSquareEmpty) {
+      // First turn: only requirement is that one of the placed tiles covers the center square
       const includesCenter = placedTiles.some(tile => tile.row === 7 && tile.col === 7);
       console.log('First move includes center?', includesCenter);
+      console.log('=== END TILE CONNECTION CHECK (FIRST TURN) ===');
       return includesCenter;
     }
 
