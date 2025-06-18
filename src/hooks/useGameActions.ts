@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { Tile } from "@/types/game";
@@ -291,7 +290,7 @@ export const useGameActions = ({
         // Advance turn again (challenger loses their turn)
         await nextTurn();
         
-        toast.success(`Challenge failed! All words are valid. You lose your next turn.`);
+        toast.success(`Challenge failed: This word is valid. You lose your next turn.`);
         
       } else {
         // Invalid words found - undo the move
