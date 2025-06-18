@@ -218,8 +218,8 @@ const Game = () => {
   // Determine if the current player can challenge
   const canChallenge = !!(
     game?.pending_challenge && 
-    !isCurrentTurn && 
-    currentPlayer?.id !== game.pending_challenge.originalPlayerId
+    currentPlayer?.id !== game.pending_challenge.originalPlayerId &&
+    placedTilesThisTurn.length === 0 // Can only challenge if current player hasn't placed any tiles yet
   );
 
   // Create gameState with local board for current player's view

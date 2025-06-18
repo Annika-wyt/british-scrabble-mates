@@ -63,12 +63,12 @@ const GameActions = ({
             Retrieve Tiles
           </Button>
 
-          {/* Challenge button - only enabled when not current turn and can challenge */}
+          {/* Challenge button - enabled when there's a pending challenge and current player hasn't placed tiles yet */}
           <Button
             onClick={onChallenge}
             variant="destructive"
             className="flex items-center gap-2"
-            disabled={isCurrentTurn || !canChallenge}
+            disabled={!canChallenge}
           >
             <AlertTriangle className="w-4 h-4" />
             Challenge
@@ -87,7 +87,9 @@ const GameActions = ({
 
         {/* Turn indicator */}
         <div className="mt-3 text-sm text-center">
-          {isCurrentTurn ? (
+          {canChallenge && isCurrentTurn ? (
+            <span className="text-orange-600 font-semibold">Opponent just played - You can challenge their word or play your own</span>
+          ) : isCurrentTurn ? (
             <span className="text-green-600 font-semibold">Your Turn - Place tiles and submit your word</span>
           ) : canChallenge ? (
             <span className="text-orange-600 font-semibold">Opponent just played - You can challenge their words</span>
