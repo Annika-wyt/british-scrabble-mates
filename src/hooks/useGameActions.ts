@@ -45,7 +45,7 @@ export const useGameActions = ({
     setLocalBoard(gameState.board);
   }, [gameState.board]);
 
-  // Helper function to check if each newly placed tile connects to existing tiles
+  // Helper function to check if placed tiles form a connected group that connects to existing tiles
   const isConnectedToExistingTiles = (placedTiles: {row: number, col: number, tile: Tile}[], currentBoard: (Tile | null)[][]): boolean => {
     console.log('=== CHECKING TILE CONNECTIONS ===');
     console.log('Placed tiles:', placedTiles);
@@ -77,11 +77,20 @@ export const useGameActions = ({
       return includesCenter;
     }
 
-    // For subsequent moves, each placed tile must be adjacent to an existing tile
-    // OR be part of a line/word that includes existing tiles
-    const allConnected = placedTiles.every(placedTile => {
+    // For subsequent moves, check if the newly placed tiles form a connected group
+    // and that this connected group has at least one connection to existing tiles
+    
+    // First, verify that all placed tiles form a connected group among themselves
+    if (!areAllPlacedTilesConnected(placedTiles)) {
+      console.log('Placed tiles do not form a connected group');
+      console.log('=== END TILE CONNECTION CHECK (DISCONNECTED GROUP) ===');
+      return false;
+    }
+    
+    // Now check if this connected group connects to existing tiles on the board
+    const hasConnectionToExisting = placedTiles.some(placedTile => {
       const { row, col } = placedTile;
-      console.log(`Checking connectivity for tile at (${row}, ${col})`);
+      console.log(`Checking connections for tile at (${row}, ${col})`);
       
       // Check all four adjacent positions
       const adjacentPositions = [
@@ -91,73 +100,67 @@ export const useGameActions = ({
         { row, col: col + 1 }  // Right
       ];
 
-      // Check if directly adjacent to an existing tile
+      // Check if directly adjacent to an existing tile (not placed this turn)
       for (const pos of adjacentPositions) {
         // Check bounds
         if (pos.row >= 0 && pos.row < 15 && pos.col >= 0 && pos.col < 15) {
-          // Check if there's an existing tile at this position (not placed this turn)
           const hasExistingTile = currentBoard[pos.row][pos.col] !== null;
           const isPlacedThisTurn = placedTiles.some(p => p.row === pos.row && p.col === pos.col);
           
           console.log(`  Adjacent position (${pos.row}, ${pos.col}): hasExisting=${hasExistingTile}, placedThisTurn=${isPlacedThisTurn}`);
           
           if (hasExistingTile && !isPlacedThisTurn) {
-            console.log(`  ✓ Tile at (${row}, ${col}) is directly adjacent to existing tile at (${pos.row}, ${pos.col})`);
+            console.log(`  ✓ Tile at (${row}, ${col}) connects to existing tile at (${pos.row}, ${pos.col})`);
             return true;
           }
         }
       }
       
-      // If not directly adjacent, check if it's part of a line that includes existing tiles
-      const partOfValidLine = isPartOfValidLine(placedTile, placedTiles, currentBoard);
-      console.log(`  Part of valid line? ${partOfValidLine}`);
-      return partOfValidLine;
+      return false;
     });
     
-    console.log('All tiles connected?', allConnected);
+    console.log('Connected group has connection to existing tiles?', hasConnectionToExisting);
     console.log('=== END TILE CONNECTION CHECK ===');
-    return allConnected;
+    return hasConnectionToExisting;
   };
 
-  // Helper function to check if a tile is part of a valid line (horizontal or vertical) that includes existing tiles
-  const isPartOfValidLine = (targetTile: {row: number, col: number, tile: Tile}, placedTiles: {row: number, col: number, tile: Tile}[], board: (Tile | null)[][]): boolean => {
-    const { row, col } = targetTile;
+  // Helper function to check if all placed tiles form a connected group among themselves
+  const areAllPlacedTilesConnected = (placedTiles: {row: number, col: number, tile: Tile}[]): boolean => {
+    if (placedTiles.length <= 1) return true;
     
-    // Check horizontal line
-    const horizontalTiles = placedTiles.filter(t => t.row === row).sort((a, b) => a.col - b.col);
-    if (horizontalTiles.length > 1) {
-      // Find the full extent of the line including existing tiles
-      const minCol = Math.min(...horizontalTiles.map(t => t.col));
-      const maxCol = Math.max(...horizontalTiles.map(t => t.col));
+    console.log('Checking if placed tiles form connected group:', placedTiles);
+    
+    // Use flood fill to check connectivity
+    const visited = new Set<string>();
+    const toVisit = [`${placedTiles[0].row},${placedTiles[0].col}`];
+    visited.add(toVisit[0]);
+    
+    while (toVisit.length > 0) {
+      const current = toVisit.pop()!;
+      const [currentRow, currentCol] = current.split(',').map(Number);
       
-      // Check if there are existing tiles in this line
-      for (let c = minCol; c <= maxCol; c++) {
-        const hasExistingTile = board[row][c] !== null;
-        const isPlacedThisTurn = placedTiles.some(p => p.row === row && p.col === c);
-        if (hasExistingTile && !isPlacedThisTurn) {
-          return true;
+      // Check all four adjacent positions for other placed tiles
+      const adjacentPositions = [
+        { row: currentRow - 1, col: currentCol }, // Up
+        { row: currentRow + 1, col: currentCol }, // Down
+        { row: currentRow, col: currentCol - 1 }, // Left
+        { row: currentRow, col: currentCol + 1 }  // Right
+      ];
+      
+      for (const pos of adjacentPositions) {
+        const posKey = `${pos.row},${pos.col}`;
+        const isPlacedTile = placedTiles.some(p => p.row === pos.row && p.col === pos.col);
+        
+        if (isPlacedTile && !visited.has(posKey)) {
+          visited.add(posKey);
+          toVisit.push(posKey);
         }
       }
     }
     
-    // Check vertical line
-    const verticalTiles = placedTiles.filter(t => t.col === col).sort((a, b) => a.row - b.row);
-    if (verticalTiles.length > 1) {
-      // Find the full extent of the line including existing tiles
-      const minRow = Math.min(...verticalTiles.map(t => t.row));
-      const maxRow = Math.max(...verticalTiles.map(t => t.row));
-      
-      // Check if there are existing tiles in this line
-      for (let r = minRow; r <= maxRow; r++) {
-        const hasExistingTile = board[r][col] !== null;
-        const isPlacedThisTurn = placedTiles.some(p => p.row === r && p.col === col);
-        if (hasExistingTile && !isPlacedThisTurn) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
+    const allConnected = visited.size === placedTiles.length;
+    console.log(`Visited ${visited.size} out of ${placedTiles.length} placed tiles. All connected: ${allConnected}`);
+    return allConnected;
   };
 
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
@@ -256,7 +259,7 @@ export const useGameActions = ({
       // Validate connection to existing tiles on the board using the CURRENT board state (localBoard)
       // This ensures we check against all tiles currently on the board, including previous moves
       if (!isConnectedToExistingTiles(placedTilesThisTurn, localBoard)) {
-        toast.error('Each tile must connect to existing tiles on the board');
+        toast.error('Tiles must form a connected group and connect to existing tiles on the board');
         return;
       }
 
