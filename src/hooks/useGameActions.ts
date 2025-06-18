@@ -45,15 +45,16 @@ export const useGameActions = ({
     setLocalBoard(gameState.board);
   }, [gameState.board]);
 
-  // Helper function to check if a placement is adjacent to existing tiles
-  const isAdjacentToExistingTiles = (placedTiles: {row: number, col: number, tile: Tile}[], board: (Tile | null)[][]): boolean => {
+  // Helper function to check if a placement connects to existing tiles
+  const isConnectedToExistingTiles = (placedTiles: {row: number, col: number, tile: Tile}[], board: (Tile | null)[][]): boolean => {
     // If this is the first move in the game, it must include the center square (7,7)
     const isCenterSquareEmpty = board[7][7] === null;
     if (isCenterSquareEmpty) {
       return placedTiles.some(tile => tile.row === 7 && tile.col === 7);
     }
 
-    // For subsequent moves, at least one placed tile must be adjacent to an existing tile
+    // For subsequent moves, check if any placed tile is adjacent to an existing tile
+    // or if placed tiles form a connected group that touches existing tiles
     for (const placedTile of placedTiles) {
       const { row, col } = placedTile;
       
@@ -68,8 +69,11 @@ export const useGameActions = ({
       for (const pos of adjacentPositions) {
         // Check bounds
         if (pos.row >= 0 && pos.row < 15 && pos.col >= 0 && pos.col < 15) {
-          // Check if there's an existing tile at this position
-          if (board[pos.row][pos.col] !== null) {
+          // Check if there's an existing tile at this position (not placed this turn)
+          const hasExistingTile = board[pos.row][pos.col] !== null;
+          const isPlacedThisTurn = placedTiles.some(p => p.row === pos.row && p.col === pos.col);
+          
+          if (hasExistingTile && !isPlacedThisTurn) {
             return true;
           }
         }
@@ -77,6 +81,42 @@ export const useGameActions = ({
     }
 
     return false;
+  };
+
+  // Helper function to check if placed tiles form a connected group
+  const areAllPlacedTilesConnected = (placedTiles: {row: number, col: number, tile: Tile}[]): boolean => {
+    if (placedTiles.length <= 1) return true;
+
+    // Create a set of placed positions for quick lookup
+    const placedPositions = new Set(placedTiles.map(t => `${t.row},${t.col}`));
+    
+    // Start from the first placed tile and use BFS to find all connected tiles
+    const visited = new Set<string>();
+    const queue = [`${placedTiles[0].row},${placedTiles[0].col}`];
+    visited.add(queue[0]);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const [row, col] = current.split(',').map(Number);
+
+      // Check all adjacent positions
+      const adjacentPositions = [
+        `${row - 1},${col}`, // Up
+        `${row + 1},${col}`, // Down
+        `${row},${col - 1}`, // Left
+        `${row},${col + 1}`  // Right
+      ];
+
+      for (const pos of adjacentPositions) {
+        if (placedPositions.has(pos) && !visited.has(pos)) {
+          visited.add(pos);
+          queue.push(pos);
+        }
+      }
+    }
+
+    // All placed tiles should be reachable from the first tile
+    return visited.size === placedTiles.length;
   };
 
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
@@ -172,16 +212,15 @@ export const useGameActions = ({
       console.log('Player submitting:', currentPlayer.player_name || currentPlayer.name);
       console.log('Placed tiles:', placedTilesThisTurn);
 
-      // Validate tile placement (straight line, no gaps)
-      const placementValidation = validateTilePlacement(placedTilesThisTurn);
-      if (!placementValidation.isValid) {
-        toast.error(placementValidation.error || 'Invalid tile placement');
+      // Validate that all placed tiles are connected to each other
+      if (!areAllPlacedTilesConnected(placedTilesThisTurn)) {
+        toast.error('All placed tiles must be connected to each other');
         return;
       }
 
-      // Validate adjacency to existing tiles
-      if (!isAdjacentToExistingTiles(placedTilesThisTurn, gameState.board)) {
-        toast.error('Word must be placed adjacent to existing tiles on the board');
+      // Validate connection to existing tiles on the board
+      if (!isConnectedToExistingTiles(placedTilesThisTurn, gameState.board)) {
+        toast.error('Tiles must connect to existing tiles on the board');
         return;
       }
 
