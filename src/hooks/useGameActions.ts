@@ -232,28 +232,34 @@ export const useGameActions = ({
       console.log('Score calculated:', score);
       console.log('New total score:', newScore);
 
-      // Set up pending challenge with all the move data
-      const pendingChallenge = {
-        originalPlayerId: currentPlayer.id,
-        placedTiles: placedTilesThisTurn,
-        score: score,
-        originalBoard: gameState.board, // Store the board state before the move
-        originalTiles: currentPlayer.tiles, // Store the player's tiles before the move
-        drawnTiles: [] // Will be populated after drawing tiles
-      };
-
       // Update the actual game board for all players
       await updateGameBoard(localBoard);
 
       // Update player score
       await updatePlayerScore(newScore);
 
-      // Draw new tiles to replenish the rack
+      // Draw new tiles to replenish the rack and get the drawn tiles
       const tilesUsed = placedTilesThisTurn.length;
-      await drawTilesForPlayer(currentPlayer.id, tilesUsed);
+      const tilesToDraw = Math.min(tilesUsed, gameState.tileBag.length);
+      const drawnTiles = gameState.tileBag.slice(0, tilesToDraw);
+      
+      console.log('Tiles drawn for challenge tracking:', drawnTiles);
 
-      // Set the pending challenge in the game state
+      // Set up pending challenge with all the move data including the drawn tiles
+      const pendingChallenge = {
+        originalPlayerId: currentPlayer.id,
+        placedTiles: placedTilesThisTurn,
+        score: score,
+        originalBoard: gameState.board, // Store the board state before the move
+        originalTiles: currentPlayer.tiles, // Store the player's tiles before the move
+        drawnTiles: drawnTiles // Store the actual tiles that were drawn
+      };
+
+      // Set the pending challenge in the game state BEFORE drawing tiles
       await setPendingChallengeInGame(pendingChallenge);
+
+      // Now draw new tiles to replenish the rack
+      await drawTilesForPlayer(currentPlayer.id, tilesUsed);
 
       // Clear placed tiles tracking
       setPlacedTilesThisTurn([]);
@@ -340,32 +346,30 @@ export const useGameActions = ({
         // Revert the board to the state before the move
         await updateGameBoard(challenge.originalBoard);
         
-        // Restore the challenged player's tiles to exactly what they had before the move
-        const originalTiles = challenge.originalTiles || [];
-        
-        // Get the current tiles the player has (which includes newly drawn tiles)
-        const currentTiles = challengedPlayer.tiles || [];
-        
-        // Calculate how many tiles were drawn (should be equal to tiles used in the move)
-        const tilesUsed = challenge.placedTiles.length;
-        const newlyDrawnTiles = currentTiles.slice(-tilesUsed); // Get the last N tiles (newly drawn)
-        
-        // Return the newly drawn tiles to the tile bag
-        const updatedTileBag = restoreTilesToBag(newlyDrawnTiles, gameState.tileBag);
-        await updateTileBag(updatedTileBag);
-        
         // Get the original placed tiles back (reset blank tiles if any)
         const restoredPlacedTiles = challenge.placedTiles.map(({ tile }) => 
           tile.isBlank ? { ...tile, chosenLetter: undefined, letter: '?' } : tile
         );
         
+        // Return the drawn tiles to the tile bag using the tracked drawn tiles
+        const drawnTiles = challenge.drawnTiles || [];
+        console.log('Returning drawn tiles to bag:', drawnTiles);
+        
+        if (drawnTiles.length > 0) {
+          const updatedTileBag = restoreTilesToBag(drawnTiles, gameState.tileBag);
+          await updateTileBag(updatedTileBag);
+        }
+        
         // Set the challenged player's tiles to their original tiles plus the restored placed tiles
+        const originalTiles = challenge.originalTiles || [];
         const finalTiles = [...originalTiles, ...restoredPlacedTiles];
         
         // Ensure exactly 7 tiles
         if (finalTiles.length !== 7) {
           console.warn(`Player should have 7 tiles but has ${finalTiles.length}`);
         }
+        
+        console.log('Final tiles for challenged player:', finalTiles);
         
         // Update the challenged player's tiles
         const { error: tilesError } = await supabase
