@@ -51,11 +51,25 @@ export const useGameActions = ({
     console.log('Placed tiles:', placedTiles);
     console.log('Current board state:', currentBoard);
     
-    // Check if this is the first move in the game by seeing if the center square is empty
-    const isCenterSquareEmpty = currentBoard[7][7] === null;
-    console.log('Is center square empty?', isCenterSquareEmpty);
+    // Check if this is the first move by counting existing tiles on the board (excluding tiles placed this turn)
+    let existingTileCount = 0;
+    for (let row = 0; row < 15; row++) {
+      for (let col = 0; col < 15; col++) {
+        if (currentBoard[row][col] !== null) {
+          // Check if this position is one of the tiles being placed this turn
+          const isPlacedThisTurn = placedTiles.some(p => p.row === row && p.col === col);
+          if (!isPlacedThisTurn) {
+            existingTileCount++;
+          }
+        }
+      }
+    }
     
-    if (isCenterSquareEmpty) {
+    const isFirstMove = existingTileCount === 0;
+    console.log('Existing tiles on board (excluding current placement):', existingTileCount);
+    console.log('Is this the first move?', isFirstMove);
+    
+    if (isFirstMove) {
       // First turn: only requirement is that one of the placed tiles covers the center square
       const includesCenter = placedTiles.some(tile => tile.row === 7 && tile.col === 7);
       console.log('First move includes center?', includesCenter);
