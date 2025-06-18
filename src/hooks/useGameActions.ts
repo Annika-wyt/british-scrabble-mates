@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { Tile } from "@/types/game";
@@ -46,17 +47,26 @@ export const useGameActions = ({
   }, [gameState.board]);
 
   // Helper function to check if each newly placed tile connects to existing tiles
-  const isConnectedToExistingTiles = (placedTiles: {row: number, col: number, tile: Tile}[], board: (Tile | null)[][]): boolean => {
+  const isConnectedToExistingTiles = (placedTiles: {row: number, col: number, tile: Tile}[], currentBoard: (Tile | null)[][]): boolean => {
+    console.log('=== CHECKING TILE CONNECTIONS ===');
+    console.log('Placed tiles:', placedTiles);
+    console.log('Current board state:', currentBoard);
+    
     // If this is the first move in the game, it must include the center square (7,7)
-    const isCenterSquareEmpty = board[7][7] === null;
+    const isCenterSquareEmpty = currentBoard[7][7] === null;
+    console.log('Is center square empty?', isCenterSquareEmpty);
+    
     if (isCenterSquareEmpty) {
-      return placedTiles.some(tile => tile.row === 7 && tile.col === 7);
+      const includesCenter = placedTiles.some(tile => tile.row === 7 && tile.col === 7);
+      console.log('First move includes center?', includesCenter);
+      return includesCenter;
     }
 
     // For subsequent moves, each placed tile must be adjacent to an existing tile
     // OR be part of a line/word that includes existing tiles
-    return placedTiles.every(placedTile => {
+    const allConnected = placedTiles.every(placedTile => {
       const { row, col } = placedTile;
+      console.log(`Checking connectivity for tile at (${row}, ${col})`);
       
       // Check all four adjacent positions
       const adjacentPositions = [
@@ -71,18 +81,27 @@ export const useGameActions = ({
         // Check bounds
         if (pos.row >= 0 && pos.row < 15 && pos.col >= 0 && pos.col < 15) {
           // Check if there's an existing tile at this position (not placed this turn)
-          const hasExistingTile = board[pos.row][pos.col] !== null;
+          const hasExistingTile = currentBoard[pos.row][pos.col] !== null;
           const isPlacedThisTurn = placedTiles.some(p => p.row === pos.row && p.col === pos.col);
           
+          console.log(`  Adjacent position (${pos.row}, ${pos.col}): hasExisting=${hasExistingTile}, placedThisTurn=${isPlacedThisTurn}`);
+          
           if (hasExistingTile && !isPlacedThisTurn) {
+            console.log(`  ✓ Tile at (${row}, ${col}) is directly adjacent to existing tile at (${pos.row}, ${pos.col})`);
             return true;
           }
         }
       }
       
       // If not directly adjacent, check if it's part of a line that includes existing tiles
-      return isPartOfValidLine(placedTile, placedTiles, board);
+      const partOfValidLine = isPartOfValidLine(placedTile, placedTiles, currentBoard);
+      console.log(`  Part of valid line? ${partOfValidLine}`);
+      return partOfValidLine;
     });
+    
+    console.log('All tiles connected?', allConnected);
+    console.log('=== END TILE CONNECTION CHECK ===');
+    return allConnected;
   };
 
   // Helper function to check if a tile is part of a valid line (horizontal or vertical) that includes existing tiles
@@ -219,8 +238,9 @@ export const useGameActions = ({
       console.log('Player submitting:', currentPlayer.player_name || currentPlayer.name);
       console.log('Placed tiles:', placedTilesThisTurn);
 
-      // Validate connection to existing tiles on the board
-      if (!isConnectedToExistingTiles(placedTilesThisTurn, gameState.board)) {
+      // Validate connection to existing tiles on the board using the CURRENT board state (localBoard)
+      // This ensures we check against all tiles currently on the board, including previous moves
+      if (!isConnectedToExistingTiles(placedTilesThisTurn, localBoard)) {
         toast.error('Each tile must connect to existing tiles on the board');
         return;
       }
