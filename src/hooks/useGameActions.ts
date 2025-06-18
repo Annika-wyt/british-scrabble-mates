@@ -238,6 +238,7 @@ export const useGameActions = ({
         placedTiles: placedTilesThisTurn,
         score: score,
         originalBoard: gameState.board, // Store the board state before the move
+        originalTiles: currentPlayer.tiles, // Store the player's tiles before the move
         drawnTiles: [] // Will be populated after drawing tiles
       };
 
@@ -339,16 +340,37 @@ export const useGameActions = ({
         // Revert the board to the state before the move
         await updateGameBoard(challenge.originalBoard);
         
-        // Return tiles to the challenged player's rack
-        const restoredTiles = challenge.placedTiles.map(({ tile }) => 
+        // Restore the challenged player's tiles to exactly what they had before the move
+        const originalTiles = challenge.originalTiles || [];
+        
+        // Get the current tiles the player has (which includes newly drawn tiles)
+        const currentTiles = challengedPlayer.tiles || [];
+        
+        // Calculate how many tiles were drawn (should be equal to tiles used in the move)
+        const tilesUsed = challenge.placedTiles.length;
+        const newlyDrawnTiles = currentTiles.slice(-tilesUsed); // Get the last N tiles (newly drawn)
+        
+        // Return the newly drawn tiles to the tile bag
+        const updatedTileBag = restoreTilesToBag(newlyDrawnTiles, gameState.tileBag);
+        await updateTileBag(updatedTileBag);
+        
+        // Get the original placed tiles back (reset blank tiles if any)
+        const restoredPlacedTiles = challenge.placedTiles.map(({ tile }) => 
           tile.isBlank ? { ...tile, chosenLetter: undefined, letter: '?' } : tile
         );
-        const challengedPlayerTiles = [...challengedPlayer.tiles, ...restoredTiles];
         
-        // Update the challenged player's tiles and score
+        // Set the challenged player's tiles to their original tiles plus the restored placed tiles
+        const finalTiles = [...originalTiles, ...restoredPlacedTiles];
+        
+        // Ensure exactly 7 tiles
+        if (finalTiles.length !== 7) {
+          console.warn(`Player should have 7 tiles but has ${finalTiles.length}`);
+        }
+        
+        // Update the challenged player's tiles
         const { error: tilesError } = await supabase
           .from('game_players')
-          .update({ tiles: challengedPlayerTiles as any })
+          .update({ tiles: finalTiles as any })
           .eq('id', challengedPlayer.id);
           
         if (tilesError) {
@@ -359,9 +381,6 @@ export const useGameActions = ({
         // Remove the score gained from the invalid move
         const revertedScore = challengedPlayer.score - challenge.score;
         await updateAnyPlayerScore(challengedPlayer.id, revertedScore);
-        
-        // Return the drawn tiles back to the tile bag
-        // Note: This is simplified - in a real implementation you'd need to track which tiles were drawn
         
         // Clear the pending challenge
         await clearPendingChallengeInGame();

@@ -70,5 +70,7 @@ export interface PendingChallenge {
   originalPlayerId: string;
   placedTiles: { row: number; col: number; tile: Tile; }[];
   score: number;
+  originalBoard?: (Tile | null)[][];
+  originalTiles?: Tile[];
   drawnTiles?: Tile[];
 }
