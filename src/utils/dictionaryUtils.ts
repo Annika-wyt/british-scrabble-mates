@@ -1,52 +1,15 @@
 
-// Collins Scrabble Words (CSW) dictionary validation
-// This is a subset for demo purposes - in production you'd use the full CSW dictionary
-const CSW_WORDS = new Set([
-  // Common 2-letter words
-  'AA', 'AB', 'AD', 'AE', 'AG', 'AH', 'AI', 'AL', 'AM', 'AN', 'AR', 'AS', 'AT', 'AW', 'AX', 'AY',
-  'BA', 'BE', 'BI', 'BO', 'BY',
-  'DA', 'DE', 'DO',
-  'EF', 'EH', 'EL', 'EM', 'EN', 'ER', 'ES', 'ET', 'EX',
-  'FA', 'FE',
-  'GI', 'GO',
-  'HA', 'HE', 'HI', 'HM', 'HO',
-  'ID', 'IF', 'IN', 'IS', 'IT',
-  'JO',
-  'KA', 'KI',
-  'LA', 'LI', 'LO',
-  'MA', 'ME', 'MI', 'MM', 'MO', 'MU', 'MY',
-  'NA', 'NE', 'NO', 'NU',
-  'OB', 'OD', 'OE', 'OF', 'OH', 'OI', 'OM', 'ON', 'OO', 'OP', 'OR', 'OS', 'OW', 'OX', 'OY',
-  'PA', 'PE', 'PI', 'PO',
-  'QI',
-  'RE',
-  'SH', 'SI', 'SO',
-  'TA', 'TI', 'TO',
-  'UG', 'UH', 'UM', 'UN', 'UP', 'UR', 'US', 'UT',
-  'WE', 'WO',
-  'XI', 'XU',
-  'YA', 'YE', 'YO',
-  'ZA', 'ZO',
-  
-  // Common 3-letter words
-  'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'DAY', 'GET',
-  'USE', 'MAN', 'NEW', 'NOW', 'WAY', 'MAY', 'SAY', 'AGO', 'SIT', 'SET', 'RUN', 'EAT', 'FAR', 'SEA', 'EYE',
-  'RED', 'TOP', 'ARM', 'TOO', 'ANY', 'SUN', 'LET', 'PUT', 'END', 'WHY', 'TRY', 'GOD', 'SIX', 'DOG', 'EAR',
-  'SIT', 'FUN', 'BAD', 'YES', 'YET', 'CAR', 'JOB', 'LOT', 'BED', 'HIT', 'EAT', 'AGE', 'BIG', 'BOX', 'FEW',
-  'GOT', 'HOT', 'LAW', 'SON', 'WAR', 'OFF', 'BAG', 'ART', 'BAR', 'BOY', 'DID', 'FLY', 'GUN', 'LED', 'LIE',
-  'NET', 'PAY', 'ROW', 'SAD', 'TAX', 'VAN', 'WIN', 'ZOO', 'ACT', 'BUY', 'CUP', 'DIG', 'EGG', 'FIG', 'HAM',
-  'ICE', 'JAM', 'KEY', 'LAP', 'MUD', 'NUT', 'OWL', 'PIG', 'RAG', 'SIP', 'TOY', 'URN', 'VET', 'WIG', 'ZIP',
-  
-  // Common longer words (but be more restrictive for testing)
-  'WORD', 'GAME', 'PLAY', 'TILE', 'HELLO', 'WORLD', 'CHAT', 'LOVE', 'NICE', 'COOL', 'BEST', 'GOOD', 'TIME',
-  'HOUSE', 'WATER', 'LIGHT', 'RIGHT', 'PLACE', 'THINK', 'GREAT', 'WHERE', 'BEING', 'EVERY', 'NEVER', 'AFTER',
-  'FIRST', 'THING', 'COULD', 'OTHER', 'THOSE', 'THEIR', 'BEFORE', 'THREE', 'SHOULD', 'AGAIN', 'FOUND', 'SMALL',
-  'STILL', 'MIGHT', 'YEARS', 'POINT', 'UNDER', 'WHILE', 'STATE', 'PEOPLE',
-  'FAMILY', 'SCHOOL', 'MOTHER', 'FATHER', 'SISTER', 'FRIEND', 'STUDENT', 'TEACHER',
-  
-  // Single letters (valid in Scrabble when forming words)
-  'A', 'I'
-]);
+// Dictionary validation using external API
+const isValidWord = async (word: string): Promise<boolean> => {
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+    return res.ok;
+  } catch (error) {
+    console.error(`Error validating word "${word}":`, error);
+    // Fallback to false if API is unavailable
+    return false;
+  }
+};
 
 export const validateWord = async (word: string): Promise<boolean> => {
   // Convert to uppercase for consistency
@@ -54,10 +17,10 @@ export const validateWord = async (word: string): Promise<boolean> => {
   
   console.log(`Validating word: ${upperWord}`);
   
-  // Check if word exists in CSW dictionary
-  const isValid = CSW_WORDS.has(upperWord);
+  // Check if word exists using the dictionary API
+  const isValid = await isValidWord(upperWord);
   
-  console.log(`Word ${upperWord} is ${isValid ? 'valid' : 'invalid'} in CSW dictionary`);
+  console.log(`Word ${upperWord} is ${isValid ? 'valid' : 'invalid'} according to dictionary API`);
   
   return isValid;
 };
@@ -119,7 +82,7 @@ export const validateAllWordsFormed = async (
 
   console.log('All words to validate:', Array.from(wordsToValidate));
 
-  // Validate each word
+  // Validate each word using the API
   for (const word of wordsToValidate) {
     if (word && word.length > 0) {
       const isValid = await validateWord(word);
@@ -192,8 +155,9 @@ const getWordAt = (
   return positions;
 };
 
-export const isValidCSWWord = (word: string): boolean => {
-  return CSW_WORDS.has(word.toUpperCase());
+// Backup function for legacy compatibility (now uses API)
+export const isValidCSWWord = async (word: string): Promise<boolean> => {
+  return await validateWord(word);
 };
 
 // New function to validate tile placement is in a straight line
