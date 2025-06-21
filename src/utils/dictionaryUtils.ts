@@ -31,6 +31,10 @@ const loadDictionary = async (): Promise<void> => {
     
     console.log(`Dictionary loaded successfully with ${DICTIONARY_WORDS.size} words`);
     
+    // Log some sample words to verify dictionary content
+    const sampleWords = ['MUSK', 'ME', 'UN'].filter(word => DICTIONARY_WORDS?.has(word));
+    console.log('Sample words found in dictionary:', sampleWords);
+    
   } catch (error) {
     console.error('Error loading dictionary:', error);
     
@@ -66,7 +70,7 @@ const loadDictionary = async (): Promise<void> => {
       // Common longer words
       'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'DAY', 'GET',
       'USE', 'MAN', 'NEW', 'NOW', 'WAY', 'MAY', 'SAY', 'WORD', 'GAME', 'PLAY', 'TILE', 'HELLO', 'WORLD', 'CHAT', 'LOVE',
-      'A', 'I'
+      'A', 'I', 'MUSK'
     ]);
   }
 };
@@ -81,12 +85,13 @@ export const validateWord = async (word: string): Promise<boolean> => {
   // Convert to uppercase for consistency
   const upperWord = word.toUpperCase();
   
-  console.log(`Validating word: ${upperWord}`);
+  console.log(`🔍 Validating word: "${upperWord}"`);
   
   // Check if word exists in dictionary
   const isValid = DICTIONARY_WORDS?.has(upperWord) || false;
   
-  console.log(`Word ${upperWord} is ${isValid ? 'valid' : 'invalid'} in dictionary`);
+  console.log(`📝 Word "${upperWord}" is ${isValid ? '✅ VALID' : '❌ INVALID'} in dictionary`);
+  console.log(`📊 Dictionary size: ${DICTIONARY_WORDS?.size || 0} words`);
   
   return isValid;
 };
@@ -99,11 +104,12 @@ export const validateAllWordsFormed = async (
     return { isValid: true, invalidWords: [] };
   }
 
-  console.log('=== WORD VALIDATION START ===');
-  console.log('Placed tiles:', placedTiles.map(pt => ({ 
+  console.log('🎯 === WORD VALIDATION START ===');
+  console.log('📍 Placed tiles:', placedTiles.map(pt => ({ 
     row: pt.row, 
     col: pt.col, 
-    letter: pt.tile?.isBlank && pt.tile?.chosenLetter ? pt.tile.chosenLetter : pt.tile?.letter 
+    letter: pt.tile?.isBlank && pt.tile?.chosenLetter ? pt.tile.chosenLetter : pt.tile?.letter,
+    isBlank: pt.tile?.isBlank || false
   })));
 
   // Create temporary board with new tiles
@@ -112,24 +118,30 @@ export const validateAllWordsFormed = async (
     tempBoard[row][col] = tile;
   }
 
+  console.log('🎲 Temporary board created with new tiles placed');
+
   const wordsToValidate = new Set<string>();
   const invalidWords: string[] = [];
 
   // Find all words that include at least one newly placed tile
   for (const { row, col } of placedTiles) {
-    console.log(`Checking words at position (${row}, ${col})`);
+    console.log(`🔎 Checking words at position (${row}, ${col})`);
     
     // Check horizontal word
     const horizontalWord = getWordAt(tempBoard, row, col, 'horizontal');
     if (horizontalWord.length > 1) {
       const wordString = horizontalWord.map(pos => {
         const tile = tempBoard[pos.row][pos.col];
-        return tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
+        const letter = tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
+        console.log(`  📍 Position (${pos.row}, ${pos.col}): tile=${JSON.stringify(tile)}, letter="${letter}"`);
+        return letter;
       }).join('');
-      console.log(`Found horizontal word: ${wordString}`);
-      if (wordString.length > 0) {
+      console.log(`➡️ Found horizontal word: "${wordString}" (${wordString.length} letters)`);
+      if (wordString.length > 0 && wordString.trim() !== '') {
         wordsToValidate.add(wordString.toUpperCase());
       }
+    } else {
+      console.log(`➡️ No horizontal word found at (${row}, ${col}) - length: ${horizontalWord.length}`);
     }
 
     // Check vertical word  
@@ -137,22 +149,27 @@ export const validateAllWordsFormed = async (
     if (verticalWord.length > 1) {
       const wordString = verticalWord.map(pos => {
         const tile = tempBoard[pos.row][pos.col];
-        return tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
+        const letter = tile?.isBlank && tile?.chosenLetter ? tile.chosenLetter : (tile?.letter || '');
+        console.log(`  📍 Position (${pos.row}, ${pos.col}): tile=${JSON.stringify(tile)}, letter="${letter}"`);
+        return letter;
       }).join('');
-      console.log(`Found vertical word: ${wordString}`);
-      if (wordString.length > 0) {
+      console.log(`⬇️ Found vertical word: "${wordString}" (${wordString.length} letters)`);
+      if (wordString.length > 0 && wordString.trim() !== '') {
         wordsToValidate.add(wordString.toUpperCase());
       }
+    } else {
+      console.log(`⬇️ No vertical word found at (${row}, ${col}) - length: ${verticalWord.length}`);
     }
   }
 
-  console.log('All words to validate:', Array.from(wordsToValidate));
+  console.log('📋 All words to validate:', Array.from(wordsToValidate));
 
   // Validate each word
   for (const word of wordsToValidate) {
     if (word && word.length > 0) {
+      console.log(`🔍 Validating word: "${word}"`);
       const isValid = await validateWord(word);
-      console.log(`Word "${word}" validation result: ${isValid}`);
+      console.log(`📝 Word "${word}" validation result: ${isValid ? '✅ VALID' : '❌ INVALID'}`);
       if (!isValid) {
         invalidWords.push(word);
       }
@@ -164,8 +181,10 @@ export const validateAllWordsFormed = async (
     invalidWords
   };
 
-  console.log('=== WORD VALIDATION END ===');
-  console.log('Final validation result:', result);
+  console.log('🏁 === WORD VALIDATION END ===');
+  console.log('📊 Final validation result:', result);
+  console.log(`${result.isValid ? '✅ ALL WORDS VALID' : '❌ INVALID WORDS FOUND'}: ${result.invalidWords.join(', ')}`);
+  
   return result;
 };
 
@@ -176,6 +195,8 @@ const getWordAt = (
   direction: 'horizontal' | 'vertical'
 ): { row: number; col: number }[] => {
   const positions: { row: number; col: number }[] = [];
+
+  console.log(`🔍 Getting ${direction} word at (${row}, ${col})`);
 
   if (direction === 'horizontal') {
     // Find start of word
@@ -189,6 +210,8 @@ const getWordAt = (
     while (endCol < 14 && board[row][endCol + 1] !== null) {
       endCol++;
     }
+
+    console.log(`  📍 Horizontal word spans from column ${startCol} to ${endCol}`);
 
     // Collect all positions in the word
     for (let c = startCol; c <= endCol; c++) {
@@ -209,6 +232,8 @@ const getWordAt = (
       endRow++;
     }
 
+    console.log(`  📍 Vertical word spans from row ${startRow} to ${endRow}`);
+
     // Collect all positions in the word
     for (let r = startRow; r <= endRow; r++) {
       if (board[r][col] !== null) {
@@ -217,7 +242,7 @@ const getWordAt = (
     }
   }
 
-  console.log(`Word positions for ${direction} at (${row}, ${col}):`, positions);
+  console.log(`📋 Word positions for ${direction} at (${row}, ${col}):`, positions);
   return positions;
 };
 
