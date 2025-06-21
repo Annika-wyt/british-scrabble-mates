@@ -1,63 +1,92 @@
 
-// Collins Scrabble Words (CSW) dictionary validation
-// This is a subset for demo purposes - in production you'd use the full CSW dictionary
-const CSW_WORDS = new Set([
-  // Common 2-letter words
-  'AA', 'AB', 'AD', 'AE', 'AG', 'AH', 'AI', 'AL', 'AM', 'AN', 'AR', 'AS', 'AT', 'AW', 'AX', 'AY',
-  'BA', 'BE', 'BI', 'BO', 'BY',
-  'DA', 'DE', 'DO',
-  'EF', 'EH', 'EL', 'EM', 'EN', 'ER', 'ES', 'ET', 'EX',
-  'FA', 'FE',
-  'GI', 'GO',
-  'HA', 'HE', 'HI', 'HM', 'HO',
-  'ID', 'IF', 'IN', 'IS', 'IT',
-  'JO',
-  'KA', 'KI',
-  'LA', 'LI', 'LO',
-  'MA', 'ME', 'MI', 'MM', 'MO', 'MU', 'MY',
-  'NA', 'NE', 'NO', 'NU',
-  'OB', 'OD', 'OE', 'OF', 'OH', 'OI', 'OM', 'ON', 'OO', 'OP', 'OR', 'OS', 'OW', 'OX', 'OY',
-  'PA', 'PE', 'PI', 'PO',
-  'QI',
-  'RE',
-  'SH', 'SI', 'SO',
-  'TA', 'TI', 'TO',
-  'UG', 'UH', 'UM', 'UN', 'UP', 'UR', 'US', 'UT',
-  'WE', 'WO',
-  'XI', 'XU',
-  'YA', 'YE', 'YO',
-  'ZA', 'ZO',
+// Dictionary validation using external dictionary file
+let DICTIONARY_WORDS: Set<string> | null = null;
+let dictionaryLoadPromise: Promise<void> | null = null;
+
+const loadDictionary = async (): Promise<void> => {
+  if (DICTIONARY_WORDS) return;
   
-  // Common 3-letter words
-  'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'DAY', 'GET',
-  'USE', 'MAN', 'NEW', 'NOW', 'WAY', 'MAY', 'SAY', 'AGO', 'SIT', 'SET', 'RUN', 'EAT', 'FAR', 'SEA', 'EYE',
-  'RED', 'TOP', 'ARM', 'TOO', 'ANY', 'SUN', 'LET', 'PUT', 'END', 'WHY', 'TRY', 'GOD', 'SIX', 'DOG', 'EAR',
-  'SIT', 'FUN', 'BAD', 'YES', 'YET', 'CAR', 'JOB', 'LOT', 'BED', 'HIT', 'EAT', 'AGE', 'BIG', 'BOX', 'FEW',
-  'GOT', 'HOT', 'LAW', 'SON', 'WAR', 'OFF', 'BAG', 'ART', 'BAR', 'BOY', 'DID', 'FLY', 'GUN', 'LED', 'LIE',
-  'NET', 'PAY', 'ROW', 'SAD', 'TAX', 'VAN', 'WIN', 'ZOO', 'ACT', 'BUY', 'CUP', 'DIG', 'EGG', 'FIG', 'HAM',
-  'ICE', 'JAM', 'KEY', 'LAP', 'MUD', 'NUT', 'OWL', 'PIG', 'RAG', 'SIP', 'TOY', 'URN', 'VET', 'WIG', 'ZIP',
-  
-  // Common longer words (but be more restrictive for testing)
-  'WORD', 'GAME', 'PLAY', 'TILE', 'HELLO', 'WORLD', 'CHAT', 'LOVE', 'NICE', 'COOL', 'BEST', 'GOOD', 'TIME',
-  'HOUSE', 'WATER', 'LIGHT', 'RIGHT', 'PLACE', 'THINK', 'GREAT', 'WHERE', 'BEING', 'EVERY', 'NEVER', 'AFTER',
-  'FIRST', 'THING', 'COULD', 'OTHER', 'THOSE', 'THEIR', 'BEFORE', 'THREE', 'SHOULD', 'AGAIN', 'FOUND', 'SMALL',
-  'STILL', 'MIGHT', 'YEARS', 'POINT', 'UNDER', 'WHILE', 'STATE', 'PEOPLE',
-  'FAMILY', 'SCHOOL', 'MOTHER', 'FATHER', 'SISTER', 'FRIEND', 'STUDENT', 'TEACHER',
-  
-  // Single letters (valid in Scrabble when forming words)
-  'A', 'I'
-]);
+  try {
+    console.log('Loading dictionary from file...');
+    const response = await fetch('/src/utils/dictionary.txt');
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load dictionary: ${response.statusText}`);
+    }
+    
+    const text = await response.text();
+    const lines = text.split('\n').filter(line => line.trim());
+    
+    DICTIONARY_WORDS = new Set();
+    
+    // Parse each line assuming format: WORD | MEANING | WORD_TYPE
+    for (const line of lines) {
+      const parts = line.split('|').map(part => part.trim());
+      if (parts.length >= 1 && parts[0]) {
+        // First column contains the valid word
+        const word = parts[0].toUpperCase();
+        DICTIONARY_WORDS.add(word);
+      }
+    }
+    
+    console.log(`Dictionary loaded successfully with ${DICTIONARY_WORDS.size} words`);
+    
+  } catch (error) {
+    console.error('Error loading dictionary:', error);
+    
+    // Fallback to a minimal set of common words if dictionary fails to load
+    console.log('Using fallback dictionary...');
+    DICTIONARY_WORDS = new Set([
+      // Common 2-letter words
+      'AA', 'AB', 'AD', 'AE', 'AG', 'AH', 'AI', 'AL', 'AM', 'AN', 'AR', 'AS', 'AT', 'AW', 'AX', 'AY',
+      'BA', 'BE', 'BI', 'BO', 'BY',
+      'DA', 'DE', 'DO',
+      'EF', 'EH', 'EL', 'EM', 'EN', 'ER', 'ES', 'ET', 'EX',
+      'FA', 'FE',
+      'GI', 'GO',
+      'HA', 'HE', 'HI', 'HM', 'HO',
+      'ID', 'IF', 'IN', 'IS', 'IT',
+      'JO',
+      'KA', 'KI',
+      'LA', 'LI', 'LO',
+      'MA', 'ME', 'MI', 'MM', 'MO', 'MU', 'MY',
+      'NA', 'NE', 'NO', 'NU',
+      'OB', 'OD', 'OE', 'OF', 'OH', 'OI', 'OM', 'ON', 'OO', 'OP', 'OR', 'OS', 'OW', 'OX', 'OY',
+      'PA', 'PE', 'PI', 'PO',
+      'QI',
+      'RE',
+      'SH', 'SI', 'SO',
+      'TA', 'TI', 'TO',
+      'UG', 'UH', 'UM', 'UN', 'UP', 'UR', 'US', 'UT',
+      'WE', 'WO',
+      'XI', 'XU',
+      'YA', 'YE', 'YO',
+      'ZA', 'ZO',
+      
+      // Common longer words
+      'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HER', 'WAS', 'ONE', 'OUR', 'HAD', 'DAY', 'GET',
+      'USE', 'MAN', 'NEW', 'NOW', 'WAY', 'MAY', 'SAY', 'WORD', 'GAME', 'PLAY', 'TILE', 'HELLO', 'WORLD', 'CHAT', 'LOVE',
+      'A', 'I'
+    ]);
+  }
+};
 
 export const validateWord = async (word: string): Promise<boolean> => {
+  // Ensure dictionary is loaded
+  if (!dictionaryLoadPromise) {
+    dictionaryLoadPromise = loadDictionary();
+  }
+  await dictionaryLoadPromise;
+  
   // Convert to uppercase for consistency
   const upperWord = word.toUpperCase();
   
   console.log(`Validating word: ${upperWord}`);
   
-  // Check if word exists in CSW dictionary
-  const isValid = CSW_WORDS.has(upperWord);
+  // Check if word exists in dictionary
+  const isValid = DICTIONARY_WORDS?.has(upperWord) || false;
   
-  console.log(`Word ${upperWord} is ${isValid ? 'valid' : 'invalid'} in CSW dictionary`);
+  console.log(`Word ${upperWord} is ${isValid ? 'valid' : 'invalid'} in dictionary`);
   
   return isValid;
 };
@@ -192,8 +221,8 @@ const getWordAt = (
   return positions;
 };
 
-export const isValidCSWWord = (word: string): boolean => {
-  return CSW_WORDS.has(word.toUpperCase());
+export const isValidCSWWord = async (word: string): Promise<boolean> => {
+  return await validateWord(word);
 };
 
 // New function to validate tile placement is in a straight line
