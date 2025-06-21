@@ -77,11 +77,11 @@ export const useGameActions = ({
       return includesCenter;
     }
 
-    // For subsequent moves, each newly placed tile must connect to at least one existing tile
-    // (either directly or through other newly placed tiles that form valid words)
+    // For subsequent moves, at least one newly placed tile must connect to existing tiles
+    // This allows words like "JIF" where only the "I" connects to an existing "A"
     
-    // Check if all newly placed tiles connect to existing tiles on the board
-    const allTilesConnected = placedTiles.every(placedTile => {
+    // Check if at least one newly placed tile connects to existing tiles on the board
+    const hasAtLeastOneConnection = placedTiles.some(placedTile => {
       const { row, col } = placedTile;
       console.log(`Checking connections for tile at (${row}, ${col})`);
       
@@ -113,9 +113,9 @@ export const useGameActions = ({
       return false;
     });
     
-    console.log('All tiles connected to existing tiles?', allTilesConnected);
+    console.log('At least one tile connected to existing tiles?', hasAtLeastOneConnection);
     console.log('=== END TILE CONNECTION CHECK ===');
-    return allTilesConnected;
+    return hasAtLeastOneConnection;
   };
 
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
@@ -214,7 +214,7 @@ export const useGameActions = ({
       // Validate connection to existing tiles on the board using the CURRENT board state (localBoard)
       // This ensures we check against all tiles currently on the board, including previous moves
       if (!isConnectedToExistingTiles(placedTilesThisTurn, localBoard)) {
-        toast.error('Each placed tile must connect to existing tiles on the board');
+        toast.error('At least one placed tile must connect to existing tiles on the board');
         return;
       }
 
