@@ -45,7 +45,7 @@ export const useGameActions = ({
     setLocalBoard(gameState.board);
   }, [gameState.board]);
 
-  // Helper function to check if placed tiles form a connected group that connects to existing tiles
+  // Helper function to check if placed tiles connect to existing tiles on the board
   const isConnectedToExistingTiles = (placedTiles: {row: number, col: number, tile: Tile}[], currentBoard: (Tile | null)[][]): boolean => {
     console.log('=== CHECKING TILE CONNECTIONS ===');
     console.log('Placed tiles:', placedTiles);
@@ -77,18 +77,11 @@ export const useGameActions = ({
       return includesCenter;
     }
 
-    // For subsequent moves, check if the newly placed tiles form a connected group
-    // and that this connected group has at least one connection to existing tiles
+    // For subsequent moves, each newly placed tile must connect to at least one existing tile
+    // (either directly or through other newly placed tiles that form valid words)
     
-    // First, verify that all placed tiles form a connected group among themselves
-    if (!areAllPlacedTilesConnected(placedTiles)) {
-      console.log('Placed tiles do not form a connected group');
-      console.log('=== END TILE CONNECTION CHECK (DISCONNECTED GROUP) ===');
-      return false;
-    }
-    
-    // Now check if this connected group connects to existing tiles on the board
-    const hasConnectionToExisting = placedTiles.some(placedTile => {
+    // Check if all newly placed tiles connect to existing tiles on the board
+    const allTilesConnected = placedTiles.every(placedTile => {
       const { row, col } = placedTile;
       console.log(`Checking connections for tile at (${row}, ${col})`);
       
@@ -116,51 +109,13 @@ export const useGameActions = ({
         }
       }
       
+      console.log(`  ✗ Tile at (${row}, ${col}) does not connect to any existing tiles`);
       return false;
     });
     
-    console.log('Connected group has connection to existing tiles?', hasConnectionToExisting);
+    console.log('All tiles connected to existing tiles?', allTilesConnected);
     console.log('=== END TILE CONNECTION CHECK ===');
-    return hasConnectionToExisting;
-  };
-
-  // Helper function to check if all placed tiles form a connected group among themselves
-  const areAllPlacedTilesConnected = (placedTiles: {row: number, col: number, tile: Tile}[]): boolean => {
-    if (placedTiles.length <= 1) return true;
-    
-    console.log('Checking if placed tiles form connected group:', placedTiles);
-    
-    // Use flood fill to check connectivity
-    const visited = new Set<string>();
-    const toVisit = [`${placedTiles[0].row},${placedTiles[0].col}`];
-    visited.add(toVisit[0]);
-    
-    while (toVisit.length > 0) {
-      const current = toVisit.pop()!;
-      const [currentRow, currentCol] = current.split(',').map(Number);
-      
-      // Check all four adjacent positions for other placed tiles
-      const adjacentPositions = [
-        { row: currentRow - 1, col: currentCol }, // Up
-        { row: currentRow + 1, col: currentCol }, // Down
-        { row: currentRow, col: currentCol - 1 }, // Left
-        { row: currentRow, col: currentCol + 1 }  // Right
-      ];
-      
-      for (const pos of adjacentPositions) {
-        const posKey = `${pos.row},${pos.col}`;
-        const isPlacedTile = placedTiles.some(p => p.row === pos.row && p.col === pos.col);
-        
-        if (isPlacedTile && !visited.has(posKey)) {
-          visited.add(posKey);
-          toVisit.push(posKey);
-        }
-      }
-    }
-    
-    const allConnected = visited.size === placedTiles.length;
-    console.log(`Visited ${visited.size} out of ${placedTiles.length} placed tiles. All connected: ${allConnected}`);
-    return allConnected;
+    return allTilesConnected;
   };
 
   const handleTilePlacement = (row: number, col: number, tile: Tile) => {
@@ -259,7 +214,7 @@ export const useGameActions = ({
       // Validate connection to existing tiles on the board using the CURRENT board state (localBoard)
       // This ensures we check against all tiles currently on the board, including previous moves
       if (!isConnectedToExistingTiles(placedTilesThisTurn, localBoard)) {
-        toast.error('Tiles must form a connected group and connect to existing tiles on the board');
+        toast.error('Each placed tile must connect to existing tiles on the board');
         return;
       }
 
